@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import type { Pool, PoolStatus } from '@/types'
 
 interface PoolWithCount extends Pool {
@@ -69,10 +70,11 @@ export default function DashboardPage() {
       <header className="border-b">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
           <h1 className="text-xl font-bold tracking-tight">Koool</h1>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">
               {profile?.display_name}
             </span>
+            <ThemeToggle />
             <Button variant="ghost" size="sm" onClick={signOut}>
               Sign out
             </Button>

@@ -1,54 +1,145 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth-store'
+import { getRoundCount, clearDownstreamPicks } from '@/lib/bracket'
+import BracketCanvas from '@/components/BracketCanvas'
+import GroupRankingTable from '@/components/GroupRankingTable'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
-import type { Pool, Group as GroupType, KnockoutMatchup, Pick, GroupPick, Result } from '@/types'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import type {
+  Pool,
+  Group as GroupType,
+  KnockoutMatchup,
+  Pick as PickChoice,
+  GroupPick,
+  Result,
+  BonusQuestion,
+} from '@/types'
 
-interface OtherUserPicks {
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface OtherMember {
   user_id: string
   display_name: string
-  knockout_picks: Pick[]
+  knockout_picks: PickChoice[]
   group_picks: GroupPick[]
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function initRanking(group: GroupType, savedPick?: GroupPick): string[] {
+  const all = group.teams as string[]
+  if (!savedPick) return [...all]
+
+  const saved = savedPick.advancing_teams as string[]
+  // If saved has all team — it's a full ranking, use it directly
+  if (saved.length === all.length) return saved
+
+  // Otherwise: put saved teams first, then remaining in original order
+  const rest = all.filter((t) => !saved.includes(t))
+  return [...saved, ...rest]
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function PicksPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const session = useAuthStore((s) => s.session)
 
+  // ── Data
   const [pool, setPool] = useState<Pool | null>(null)
   const [groups, setGroups] = useState<GroupType[]>([])
   const [matchups, setMatchups] = useState<KnockoutMatchup[]>([])
-  const [_results, setResults] = useState<Result[]>([])
+  const [results, setResults] = useState<Result[]>([])
+  const [bonusQuestions, setBonusQuestions] = useState<BonusQuestion[]>([])
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
+  const [isMember, setIsMember] = useState(true) // assume true; set false if not in pool_members
 
-  // User's picks
-  const [knockoutPicks, setKnockoutPicks] = useState<Map<string, string>>(new Map())
-  const [groupPicks, setGroupPicks] = useState<Map<string, Set<string>>>(new Map())
+  // ── User's picks
+  const [picks, setPicks] = useState<PickChoice[]>([])
+  const [groupRankings, setGroupRankings] = useState<Map<string, string[]>>(new Map())
+  const [bonusAnswers, setBonusAnswers] = useState<Map<string, string>>(new Map())
   const [hasSubmitted, setHasSubmitted] = useState(false)
 
-  // Others' picks (visible after submission)
-  const [othersPicks, setOthersPicks] = useState<OtherUserPicks[]>([])
+  // ── Others' picks (visible after submission)
+  const [otherMembers, setOtherMembers] = useState<OtherMember[]>([])
+  const [expandedMember, setExpandedMember] = useState<string | null>(null)
+
+  // ── UI state
+  const [isSaving, setIsSaving] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showSubmitDialog, setShowSubmitDialog] = useState(false)
+
+  // ─── Load others' picks ────────────────────────────────────────────────────
+
+  const loadOthers = useCallback(
+    async (poolId: string, currentUserId: string) => {
+      const [membersRes, allPicksRes, allGroupPicksRes] = await Promise.all([
+        supabase.from('pool_members').select('user_id, users(display_name)').eq('pool_id', poolId),
+        supabase.from('picks').select('*').eq('pool_id', poolId).not('submitted_at', 'is', null),
+        supabase
+          .from('group_picks')
+          .select('*')
+          .eq('pool_id', poolId)
+          .not('submitted_at', 'is', null),
+      ])
+
+      const others: OtherMember[] = []
+      for (const member of membersRes.data ?? []) {
+        if (member.user_id === currentUserId) continue
+        const user = member.users as unknown as { display_name: string } | null
+        const kPicks = ((allPicksRes.data ?? []) as PickChoice[]).filter(
+          (p) => p.user_id === member.user_id,
+        )
+        const gPicks = ((allGroupPicksRes.data ?? []) as GroupPick[]).filter(
+          (p) => p.user_id === member.user_id,
+        )
+        if (kPicks.length > 0 || gPicks.length > 0) {
+          others.push({
+            user_id: member.user_id,
+            display_name: user?.display_name ?? 'Unknown',
+            knockout_picks: kPicks,
+            group_picks: gPicks,
+          })
+        }
+      }
+      setOtherMembers(others)
+    },
+    [],
+  )
+
+  // ─── Initial load ──────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!id || !session?.user) return
 
     async function load() {
+      const userId = session!.user.id
+
       const [poolRes, groupsRes, matchupsRes, resultsRes, userPicksRes, userGroupPicksRes] =
         await Promise.all([
           supabase.from('pools').select('*').eq('id', id!).single(),
-          supabase.from('groups').select('*').eq('pool_id', id!),
+          supabase.from('groups').select('*').eq('pool_id', id!).order('name'),
           supabase.from('knockout_matchups').select('*').eq('pool_id', id!),
           supabase.from('results').select('*').eq('pool_id', id!),
-          supabase.from('picks').select('*').eq('pool_id', id!).eq('user_id', session!.user.id),
-          supabase.from('group_picks').select('*').eq('pool_id', id!).eq('user_id', session!.user.id),
+          supabase.from('picks').select('*').eq('pool_id', id!).eq('user_id', userId),
+          supabase.from('group_picks').select('*').eq('pool_id', id!).eq('user_id', userId),
         ])
 
       if (!poolRes.data) {
@@ -58,154 +149,234 @@ export default function PicksPage() {
       }
 
       const typedPool = poolRes.data as Pool
+      const typedGroups = (groupsRes.data ?? []) as GroupType[]
       setPool(typedPool)
-      setGroups((groupsRes.data ?? []) as GroupType[])
+
+      // Verify the current user is actually a pool member
+      const { data: memberRow } = await supabase
+        .from('pool_members')
+        .select('pool_id')
+        .eq('pool_id', id!)
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (!memberRow) {
+        setIsMember(false)
+        setLoading(false)
+        return
+      }
+
+      setGroups(typedGroups)
       setMatchups((matchupsRes.data ?? []) as KnockoutMatchup[])
       setResults((resultsRes.data ?? []) as Result[])
 
-      // Load user's existing knockout picks
-      const kp = new Map<string, string>()
-      let allSubmitted = true
-      for (const pick of (userPicksRes.data ?? []) as Pick[]) {
-        kp.set(`${pick.round}-${pick.matchup_index}`, pick.picked_team)
-        if (!pick.submitted_at) allSubmitted = false
-      }
-      if ((userPicksRes.data ?? []).length === 0) allSubmitted = false
-      setKnockoutPicks(kp)
+      // Load bonus questions
+      const bqRes = await supabase
+        .from('bonus_questions')
+        .select('*')
+        .eq('pool_id', id!)
+        .order('created_at')
+      const questions = (bqRes.data ?? []) as BonusQuestion[]
+      setBonusQuestions(questions)
 
-      // Load user's existing group picks
-      const gp = new Map<string, Set<string>>()
-      for (const pick of (userGroupPicksRes.data ?? []) as GroupPick[]) {
-        gp.set(pick.group_id, new Set(pick.advancing_teams as string[]))
-        if (!pick.submitted_at) allSubmitted = false
+      // Load bonus answers for this user
+      if (questions.length > 0) {
+        const baRes = await supabase
+          .from('bonus_answers')
+          .select('*')
+          .in(
+            'bonus_question_id',
+            questions.map((q) => q.id),
+          )
+          .eq('user_id', userId)
+        const answerMap = new Map<string, string>()
+        for (const a of baRes.data ?? []) {
+          answerMap.set(a.bonus_question_id as string, a.answer_text as string)
+        }
+        setBonusAnswers(answerMap)
       }
-      setGroupPicks(gp)
-      setHasSubmitted(allSubmitted && (userPicksRes.data ?? []).length > 0)
 
-      // If user has submitted, load others' picks
-      if (allSubmitted && (userPicksRes.data ?? []).length > 0) {
-        await loadOthersPicks(id!, session!.user.id)
+      // Restore knockout picks
+      const savedPicks = (userPicksRes.data ?? []) as PickChoice[]
+      setPicks(savedPicks)
+
+      // Determine submitted state
+      let submitted = savedPicks.length > 0 && savedPicks.every((p) => p.submitted_at !== null)
+      const savedGroupPicks = (userGroupPicksRes.data ?? []) as GroupPick[]
+      if (typedPool.has_group_stage && savedGroupPicks.length > 0) {
+        submitted = submitted && savedGroupPicks.every((p) => p.submitted_at !== null)
+      }
+      setHasSubmitted(submitted)
+
+      // Restore group rankings
+      const rankMap = new Map<string, string[]>()
+      for (const group of typedGroups) {
+        const saved = savedGroupPicks.find((gp) => gp.group_id === group.id)
+        rankMap.set(group.id, initRanking(group, saved))
+      }
+      setGroupRankings(rankMap)
+
+      if (submitted) {
+        await loadOthers(id!, userId)
       }
 
       setLoading(false)
     }
 
-    load()
-  }, [id, session?.user, navigate])
+    load().catch((err) => {
+      console.error('[PicksPage] load error:', err)
+      toast.error('Failed to load picks page')
+      setLoading(false)
+    })
+  }, [id, session?.user, navigate, loadOthers])
 
-  const loadOthersPicks = async (poolId: string, currentUserId: string) => {
-    const [membersRes, allPicksRes, allGroupPicksRes] = await Promise.all([
-      supabase.from('pool_members').select('user_id, users(display_name)').eq('pool_id', poolId),
-      supabase.from('picks').select('*').eq('pool_id', poolId).not('submitted_at', 'is', null),
-      supabase.from('group_picks').select('*').eq('pool_id', poolId).not('submitted_at', 'is', null),
-    ])
+  // ─── Pick handlers ─────────────────────────────────────────────────────────
 
-    const others: OtherUserPicks[] = []
-    for (const member of (membersRes.data ?? [])) {
-      if (member.user_id === currentUserId) continue
-      const user = member.users as unknown as { display_name: string } | null
-      const userKPicks = ((allPicksRes.data ?? []) as Pick[]).filter(
-        (p) => p.user_id === member.user_id,
-      )
-      const userGPicks = ((allGroupPicksRes.data ?? []) as GroupPick[]).filter(
-        (p) => p.user_id === member.user_id,
-      )
-      if (userKPicks.length > 0 || userGPicks.length > 0) {
-        others.push({
-          user_id: member.user_id,
-          display_name: user?.display_name ?? 'Unknown',
-          knockout_picks: userKPicks,
-          group_picks: userGPicks,
-        })
-      }
-    }
-    setOthersPicks(others)
-  }
+  const isReadOnly = hasSubmitted || pool?.status !== 'upcoming'
 
-  const toggleGroupPick = (groupId: string, team: string) => {
-    if (hasSubmitted || pool?.status !== 'upcoming') return
-    const current = groupPicks.get(groupId) ?? new Set<string>()
-    const maxPicks = pool?.advance_per_group ?? 1
+  const teamCount =
+    pool?.has_group_stage && pool.advance_per_group
+      ? groups.length * pool.advance_per_group
+      : (pool?.teams as string[] | undefined)?.length ?? 0
 
-    const updated = new Set(current)
-    if (updated.has(team)) {
-      updated.delete(team)
-    } else if (updated.size < maxPicks) {
-      updated.add(team)
+  const totalRounds = getRoundCount(teamCount)
+
+  function handleKnockoutPick(round: number, matchupIndex: number, team: string) {
+    if (isReadOnly) return
+
+    const newPick: PickChoice = {
+      id: `local-${round}-${matchupIndex}`,
+      pool_id: pool!.id,
+      user_id: session!.user.id,
+      round,
+      matchup_index: matchupIndex,
+      picked_team: team,
+      submitted_at: null,
     }
 
-    const newMap = new Map(groupPicks)
-    newMap.set(groupId, updated)
-    setGroupPicks(newMap)
+    const updated = [
+      ...picks.filter((p) => !(p.round === round && p.matchup_index === matchupIndex)),
+      newPick,
+    ]
+
+    setPicks(clearDownstreamPicks(updated, round, matchupIndex, totalRounds))
   }
 
-  const setKnockoutPick = (round: number, matchupIndex: number, team: string) => {
-    if (hasSubmitted || pool?.status !== 'upcoming') return
-    const key = `${round}-${matchupIndex}`
-    const newMap = new Map(knockoutPicks)
-    newMap.set(key, team)
-    setKnockoutPicks(newMap)
+  function handleGroupRankingChange(groupId: string, newRanking: string[]) {
+    if (isReadOnly) return
+    setGroupRankings((prev) => new Map(prev).set(groupId, newRanking))
   }
 
-  const handleSubmit = async () => {
+  // ─── Save / Submit ─────────────────────────────────────────────────────────
+
+  async function persistPicks(submittedAt: string | null) {
     if (!pool || !session?.user) return
-    try {
-      setSubmitting(true)
-      const now = new Date().toISOString()
+    const userId = session.user.id
 
-      // Upsert group picks
-      if (pool.has_group_stage) {
-        for (const group of groups) {
-          const selected = groupPicks.get(group.id)
-          if (!selected || selected.size === 0) {
-            toast.error(`Please select advancing teams for ${group.name}`)
-            return
-          }
-
-          await supabase.from('group_picks').upsert(
-            {
-              pool_id: pool.id,
-              user_id: session.user.id,
-              group_id: group.id,
-              advancing_teams: Array.from(selected),
-              submitted_at: now,
-            },
-            { onConflict: 'pool_id,user_id,group_id' },
-          )
+    // Validate group picks
+    if (pool.has_group_stage) {
+      for (const group of groups) {
+        const ranking = groupRankings.get(group.id) ?? []
+        if (ranking.length === 0) {
+          toast.error(`Please rank teams for ${group.name}`)
+          return false
         }
       }
+    }
 
-      // Upsert knockout picks
-      const r1Matchups = matchups.filter((m) => m.round === 1)
-      for (const m of r1Matchups) {
-        const picked = knockoutPicks.get(`${m.round}-${m.matchup_index}`)
-        if (!picked) {
-          toast.error(`Please pick a winner for matchup #${m.matchup_index + 1}`)
-          return
-        }
+    // Validate knockout picks: final must be picked
+    if (totalRounds > 0) {
+      const hasFinal = picks.some((p) => p.round === totalRounds && p.matchup_index === 0)
+      if (!hasFinal) {
+        toast.error('Please pick a champion (fill in the complete bracket)')
+        return false
+      }
+    }
 
-        await supabase.from('picks').upsert(
+    // Upsert group picks
+    if (pool.has_group_stage) {
+      for (const group of groups) {
+        const ranking = groupRankings.get(group.id) ?? (group.teams as string[])
+        const { error } = await supabase.from('group_picks').upsert(
           {
             pool_id: pool.id,
-            user_id: session.user.id,
-            round: m.round,
-            matchup_index: m.matchup_index,
-            picked_team: picked,
-            submitted_at: now,
+            user_id: userId,
+            group_id: group.id,
+            advancing_teams: ranking,
+            submitted_at: submittedAt,
           },
-          { onConflict: 'pool_id,user_id,round,matchup_index' },
+          { onConflict: 'pool_id,user_id,group_id' },
         )
+        if (error) throw error
       }
+    }
 
-      toast.success('Picks submitted!')
-      setHasSubmitted(true)
-      await loadOthersPicks(pool.id, session.user.id)
+    // Upsert knockout picks (all rounds)
+    for (const pick of picks) {
+      const { error } = await supabase.from('picks').upsert(
+        {
+          pool_id: pool.id,
+          user_id: userId,
+          round: pick.round,
+          matchup_index: pick.matchup_index,
+          picked_team: pick.picked_team,
+          submitted_at: submittedAt,
+        },
+        { onConflict: 'pool_id,user_id,round,matchup_index' },
+      )
+      if (error) throw error
+    }
+
+    // Upsert bonus answers
+    for (const [questionId, answerText] of bonusAnswers.entries()) {
+      if (!answerText.trim()) continue
+      const { error } = await supabase.from('bonus_answers').upsert(
+        {
+          bonus_question_id: questionId,
+          user_id: userId,
+          answer_text: answerText.trim(),
+          submitted_at: submittedAt,
+        },
+        { onConflict: 'bonus_question_id,user_id' },
+      )
+      if (error) throw error
+    }
+
+    return true
+  }
+
+  async function handleSave() {
+    if (isReadOnly) return
+    try {
+      setIsSaving(true)
+      const ok = await persistPicks(null)
+      if (ok) toast.success('Progress saved!')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save picks')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleSubmit() {
+    setShowSubmitDialog(false)
+    try {
+      setIsSubmitting(true)
+      const now = new Date().toISOString()
+      const ok = await persistPicks(now)
+      if (ok) {
+        toast.success('Picks submitted!')
+        setHasSubmitted(true)
+        await loadOthers(pool!.id, session!.user.id)
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to submit picks')
     } finally {
-      setSubmitting(false)
+      setIsSubmitting(false)
     }
   }
+
+  // ─── Loading skeleton ──────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -216,6 +387,8 @@ export default function PicksPage() {
           </div>
         </header>
         <main className="mx-auto max-w-4xl space-y-6 px-4 py-8">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-64 w-full" />
           <Skeleton className="h-48 w-full" />
         </main>
       </div>
@@ -224,25 +397,58 @@ export default function PicksPage() {
 
   if (!pool) return null
 
-  const isUpcoming = pool.status === 'upcoming'
+  if (!isMember) {
+    return (
+      <div className="min-h-screen bg-background">
+        <header className="border-b">
+          <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
+              &larr; Home
+            </Button>
+            <ThemeToggle />
+          </div>
+        </header>
+        <main className="mx-auto max-w-4xl px-4 py-16 text-center">
+          <h2 className="mb-2 text-xl font-semibold">You're not a member of this pool</h2>
+          <p className="mb-6 text-sm text-muted-foreground">
+            You need to join via the invite link before you can enter picks.
+          </p>
+          <Button asChild variant="outline">
+            <a href={`/join/${pool.invite_code}`}>Join "{pool.name}"</a>
+          </Button>
+        </main>
+      </div>
+    )
+  }
+
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
-        <div className="mx-auto flex max-w-4xl items-center gap-3 px-4 py-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate(`/pools/${pool.id}`)}>
-            &larr; Pool
-          </Button>
-          <h1 className="text-lg font-bold">{pool.name} — Picks</h1>
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={() => navigate(`/pools/${pool.id}`)}>
+              &larr; Pool
+            </Button>
+            <h1 className="text-base font-bold">{pool.name} — Picks</h1>
+          </div>
+          <ThemeToggle />
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl space-y-6 px-4 py-8">
+      <main className="mx-auto max-w-4xl space-y-8 px-4 py-8">
+        {/* Status banners */}
         {hasSubmitted && (
-          <Badge variant="default" className="text-sm">Picks Submitted</Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="default">Picks Submitted</Badge>
+            <span className="text-sm text-muted-foreground">
+              Your picks are locked in. See how others picked below.
+            </span>
+          </div>
         )}
 
-        {!isUpcoming && !hasSubmitted && (
+        {!hasSubmitted && pool.status !== 'upcoming' && (
           <Card>
             <CardContent className="py-4 text-center text-sm text-muted-foreground">
               This pool is no longer accepting picks.
@@ -250,172 +456,222 @@ export default function PicksPage() {
           </Card>
         )}
 
-        {/* Group Picks */}
+        {/* ── Group stage picks ────────────────────────────────────────────── */}
         {pool.has_group_stage && groups.length > 0 && (
           <section>
-            <h2 className="mb-3 text-lg font-semibold">
-              Group Stage Picks
-              {pool.advance_per_group && (
-                <span className="ml-2 text-sm font-normal text-muted-foreground">
-                  (select top {pool.advance_per_group} per group)
-                </span>
-              )}
-            </h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {groups.map((group) => {
-                const selected = groupPicks.get(group.id) ?? new Set<string>()
-                return (
-                  <div key={group.id} className="rounded-md border">
-                    <div className="border-b bg-muted/50 px-3 py-2">
-                      <h4 className="text-sm font-semibold">{group.name}</h4>
-                    </div>
-                    <ul className="divide-y">
-                      {(group.teams as string[]).map((team) => (
-                        <li key={team} className="flex items-center justify-between px-3 py-2">
-                          <span className="text-sm">{team}</span>
-                          <button
-                            type="button"
-                            disabled={hasSubmitted || !isUpcoming}
-                            onClick={() => toggleGroupPick(group.id, team)}
-                            className={`rounded-md border px-2 py-0.5 text-xs transition-colors ${
-                              selected.has(team)
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : 'border-input hover:bg-muted'
-                            } disabled:opacity-50`}
-                          >
-                            {selected.has(team) ? 'Selected' : 'Pick'}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )
-              })}
+            <h2 className="mb-1 text-lg font-semibold">Group Stage Picks</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Drag to rank each group — top {pool.advance_per_group ?? 1}{' '}
+              {pool.advance_per_group === 1 ? 'team advances' : 'teams advance'} per group.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {groups.map((group) => (
+                <GroupRankingTable
+                  key={group.id}
+                  group={group}
+                  advanceCount={pool.advance_per_group ?? 1}
+                  ranking={groupRankings.get(group.id) ?? (group.teams as string[])}
+                  onRankingChange={(r) => handleGroupRankingChange(group.id, r)}
+                  disabled={isReadOnly}
+                />
+              ))}
             </div>
           </section>
         )}
 
-        {/* Knockout Picks */}
+        {/* ── Knockout bracket ─────────────────────────────────────────────── */}
         <section>
-          <h2 className="mb-3 text-lg font-semibold">Knockout Picks</h2>
-          <div className="space-y-3">
-            {matchups
-              .filter((m) => m.round === 1)
-              .sort((a, b) => a.matchup_index - b.matchup_index)
-              .map((m) => {
-                const teamA = m.team_a ?? m.group_source_a ?? 'TBD'
-                const teamB = m.team_b ?? m.group_source_b ?? 'TBD'
-                const picked = knockoutPicks.get(`${m.round}-${m.matchup_index}`)
-
-                return (
-                  <div key={m.id} className="rounded-md border p-3">
-                    <p className="mb-2 text-xs text-muted-foreground">
-                      Matchup #{m.matchup_index + 1}
-                    </p>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={hasSubmitted || !isUpcoming}
-                        onClick={() => setKnockoutPick(m.round, m.matchup_index, teamA)}
-                        className={`flex-1 rounded-md border p-2 text-sm transition-colors ${
-                          picked === teamA
-                            ? 'border-primary bg-primary text-primary-foreground'
-                            : 'border-input hover:bg-muted'
-                        } disabled:opacity-50`}
-                      >
-                        {teamA}
-                      </button>
-                      <span className="flex items-center text-xs text-muted-foreground">vs</span>
-                      <button
-                        type="button"
-                        disabled={hasSubmitted || !isUpcoming}
-                        onClick={() => setKnockoutPick(m.round, m.matchup_index, teamB)}
-                        className={`flex-1 rounded-md border p-2 text-sm transition-colors ${
-                          picked === teamB
-                            ? 'border-primary bg-primary text-primary-foreground'
-                            : 'border-input hover:bg-muted'
-                        } disabled:opacity-50`}
-                      >
-                        {teamB}
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-          </div>
+          <h2 className="mb-1 text-lg font-semibold">Knockout Bracket</h2>
+          {matchups.length === 0 ? (
+            <Card>
+              <CardContent className="py-4 text-center text-sm text-muted-foreground">
+                No bracket configured for this pool yet.
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {!isReadOnly && (
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Click a team to pick them as the winner — your picks cascade through to the final.
+                </p>
+              )}
+              <BracketCanvas
+                matchups={matchups}
+                teamCount={teamCount}
+                mode="pick"
+                picks={picks}
+                results={results}
+                onPick={handleKnockoutPick}
+                disabled={isReadOnly}
+              />
+            </>
+          )}
         </section>
 
-        {/* Submit */}
-        {isUpcoming && !hasSubmitted && (
-          <Button className="w-full" size="lg" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? 'Submitting...' : 'Submit All Picks'}
-          </Button>
+        {/* ── Bonus questions ───────────────────────────────────────────────── */}
+        {bonusQuestions.length > 0 && (
+          <section>
+            <h2 className="mb-1 text-lg font-semibold">Bonus Questions</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Answer for extra points. Each question is worth the indicated amount.
+            </p>
+            <div className="space-y-4">
+              {bonusQuestions.map((q) => (
+                <Card key={q.id}>
+                  <CardContent className="py-4">
+                    <div className="mb-2 flex items-start justify-between gap-3">
+                      <p className="text-sm font-medium">{q.question_text}</p>
+                      <Badge variant="secondary" className="shrink-0">
+                        {q.points} pt{q.points !== 1 ? 's' : ''}
+                      </Badge>
+                    </div>
+                    <Input
+                      placeholder="Your answer…"
+                      value={bonusAnswers.get(q.id) ?? ''}
+                      disabled={isReadOnly}
+                      onChange={(e) => {
+                        const newMap = new Map(bonusAnswers)
+                        newMap.set(q.id, e.target.value)
+                        setBonusAnswers(newMap)
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </section>
         )}
 
-        {/* Others' picks (visible after submission) */}
-        {hasSubmitted && othersPicks.length > 0 && (
+        {/* ── Actions ───────────────────────────────────────────────────────── */}
+        {!isReadOnly && (
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={handleSave} disabled={isSaving || isSubmitting}>
+              {isSaving ? 'Saving…' : 'Save Progress'}
+            </Button>
+            <Button
+              onClick={() => setShowSubmitDialog(true)}
+              disabled={isSaving || isSubmitting}
+            >
+              {isSubmitting ? 'Submitting…' : 'Submit Picks'}
+            </Button>
+          </div>
+        )}
+
+        {/* ── Others' picks (after submission) ─────────────────────────────── */}
+        {hasSubmitted && (
           <>
             <Separator />
             <section>
-              <h2 className="mb-3 text-lg font-semibold">Other Members' Picks</h2>
-              <div className="space-y-4">
-                {othersPicks.map((other) => (
-                  <Card key={other.user_id}>
-                    <CardHeader>
-                      <CardTitle className="text-base">{other.display_name}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {/* Their group picks */}
-                      {other.group_picks.length > 0 && (
-                        <div>
-                          <p className="mb-1 text-xs font-semibold text-muted-foreground">
-                            Group Picks
-                          </p>
-                          {other.group_picks.map((gp) => {
-                            const group = groups.find((g) => g.id === gp.group_id)
-                            return (
-                              <p key={gp.group_id} className="text-sm">
-                                {group?.name}: {(gp.advancing_teams as string[]).join(', ')}
-                              </p>
-                            )
-                          })}
-                        </div>
-                      )}
-                      {/* Their knockout picks */}
-                      {other.knockout_picks.length > 0 && (
-                        <div>
-                          <p className="mb-1 text-xs font-semibold text-muted-foreground">
-                            Knockout Picks
-                          </p>
-                          {other.knockout_picks
-                            .sort((a, b) =>
-                              a.round !== b.round
-                                ? a.round - b.round
-                                : a.matchup_index - b.matchup_index,
-                            )
-                            .map((p) => (
-                              <p key={`${p.round}-${p.matchup_index}`} className="text-sm">
-                                R{p.round} #{p.matchup_index + 1}: {p.picked_team}
-                              </p>
-                            ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              <h2 className="mb-4 text-lg font-semibold">Other Members' Picks</h2>
+
+              {otherMembers.length === 0 ? (
+                <Card>
+                  <CardContent className="py-4 text-center text-sm text-muted-foreground">
+                    No other members have submitted picks yet.
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {otherMembers.map((member) => {
+                    const isOpen = expandedMember === member.user_id
+                    return (
+                      <Card key={member.user_id}>
+                        <CardHeader
+                          className="cursor-pointer select-none py-3"
+                          onClick={() =>
+                            setExpandedMember(isOpen ? null : member.user_id)
+                          }
+                        >
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-base">{member.display_name}</CardTitle>
+                            <span className="text-xs text-muted-foreground">
+                              {isOpen ? '▲ hide' : '▼ show'}
+                            </span>
+                          </div>
+                        </CardHeader>
+
+                        {isOpen && (
+                          <CardContent className="space-y-6 pt-0">
+                            {/* Their group rankings */}
+                            {pool.has_group_stage &&
+                              member.group_picks.length > 0 &&
+                              groups.length > 0 && (
+                                <div>
+                                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Group Predictions
+                                  </p>
+                                  <div className="grid gap-3 sm:grid-cols-2">
+                                    {groups.map((group) => {
+                                      const gp = member.group_picks.find(
+                                        (p) => p.group_id === group.id,
+                                      )
+                                      if (!gp) return null
+                                      const ranking = gp.advancing_teams as string[]
+                                      return (
+                                        <GroupRankingTable
+                                          key={group.id}
+                                          group={group}
+                                          advanceCount={pool.advance_per_group ?? 1}
+                                          ranking={
+                                            ranking.length === (group.teams as string[]).length
+                                              ? ranking
+                                              : initRanking(group, gp)
+                                          }
+                                          disabled
+                                        />
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
+                            {/* Their bracket */}
+                            {member.knockout_picks.length > 0 && matchups.length > 0 && (
+                              <div>
+                                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                  Bracket Picks
+                                </p>
+                                <BracketCanvas
+                                  matchups={matchups}
+                                  teamCount={teamCount}
+                                  mode="view"
+                                  picks={member.knockout_picks}
+                                  results={results}
+                                />
+                              </div>
+                            )}
+                          </CardContent>
+                        )}
+                      </Card>
+                    )
+                  })}
+                </div>
+              )}
             </section>
           </>
         )}
-
-        {hasSubmitted && othersPicks.length === 0 && (
-          <Card>
-            <CardContent className="py-4 text-center text-sm text-muted-foreground">
-              No other members have submitted picks yet.
-            </CardContent>
-          </Card>
-        )}
       </main>
+
+      {/* ── Submit confirmation dialog ─────────────────────────────────────── */}
+      <Dialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Submit your picks?</DialogTitle>
+            <DialogDescription>
+              Once submitted, you can view other members' picks but you won't be able to change
+              your own.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSubmitDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} disabled={isSubmitting}>
+              {isSubmitting ? 'Submitting…' : 'Submit'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

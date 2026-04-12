@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import GroupTable from '@/components/GroupTable'
 import BracketView from '@/components/BracketView'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import type { Pool, PoolStatus, Group as GroupType, KnockoutMatchup } from '@/types'
 
 interface MemberInfo {
@@ -194,10 +195,11 @@ export default function PoolDashboardPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
-        <div className="mx-auto flex max-w-4xl items-center gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
           <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
             &larr; Dashboard
           </Button>
+          <ThemeToggle />
         </div>
       </header>
 
