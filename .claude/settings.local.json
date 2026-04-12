@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm dlx:*)",
+      "Bash(wsl -e bash -ic \"which pnpm && pnpm --version\")",
+      "Bash(wsl -e bash -c \"source ~/.zshrc 2>/dev/null; source ~/.bashrc 2>/dev/null; export PATH=\"\"$HOME/.local/share/pnpm:$HOME/.nvm/versions/node/*/bin:$PATH\"\"; which pnpm; pnpm --version\")",
+      "Bash(wsl -e zsh -ic \"which pnpm && pnpm --version\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && pnpm dlx shadcn@latest add input label card dialog separator sonner --yes\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && pnpm dlx shadcn@latest add dialog --yes --overwrite\")",
+      "Bash(wsl -e zsh -ic \"mkdir -p ~/projects/koool-claude/src/{types,stores,hooks,pages}\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && node -e \"\"const z = require\\(''zod''\\); console.log\\(z.version || ''no version prop''\\)\"\"\")",
+      "Read(///wsl.localhost/Ubuntu/home/radnan/projects/koool-claude/node_modules/zod/**)",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && cat node_modules/zod/package.json | grep version | head -3\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && cat node_modules/@hookform/resolvers/package.json | grep version | head -1\")",
+      "Bash(wsl -e zsh -ic \"ls ~/projects/koool-claude/node_modules/@hookform/resolvers/zod/\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && node -e \"\"const rr = require\\(''react-router-dom''\\); console.log\\(Object.keys\\(rr\\).filter\\(k => [''BrowserRouter'',''Routes'',''Route'',''Navigate'',''useNavigate'',''useSearchParams'',''Outlet''].includes\\(k\\)\\).join\\('', ''\\)\\)\"\"\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && pnpm build\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && npx tsc -b --noEmit\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && pnpm lint\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -c \"\"SELECT key, value FROM auth.config WHERE key IN \\(''GOTRUE_SITE_URL'', ''GOTRUE_URI_ALLOW_LIST'', ''GOTRUE_MAILER_URLPATHS_CONFIRMATION'', ''GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE''\\);\"\"\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -c \"\"SELECT key, value FROM auth.config LIMIT 20;\"\"\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && docker exec -i supabase_db_koool-claude psql -U postgres -c \"\"SELECT raw_app_meta_data FROM auth.users LIMIT 1;\"\"\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && docker exec -i supabase_auth_koool-claude env | grep -i ''SITE_URL\\\\|URI_ALLOW\\\\|REDIRECT''\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && git status\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && git diff\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && git log --oneline -5\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && git add   supabase/migrations/0001_initial_schema.sql   src/lib/supabase.ts   src/types/index.ts   src/stores/auth-store.ts   src/pages/AuthPage.tsx   src/pages/AuthCallback.tsx   src/pages/LandingPage.tsx   src/pages/DashboardPage.tsx   src/components/DisplayNameModal.tsx   src/components/ProtectedRoute.tsx   src/components/ui/card.tsx   src/components/ui/dialog.tsx   src/components/ui/input.tsx   src/components/ui/label.tsx   src/components/ui/separator.tsx   src/components/ui/sonner.tsx   src/App.tsx   src/App.css   supabase/config.toml   tsconfig.app.json   package.json   pnpm-lock.yaml   .env.example\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && git remote -v\")",
+      "Bash(wsl -e zsh -ic \"cd ~/projects/koool-claude && git push -u origin main\")"
+    ]
+  }
+}

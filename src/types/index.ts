@@ -1,4 +1,4 @@
-export type TournamentStatus = 'upcoming' | 'locked' | 'in_progress' | 'completed'
+export type PoolStatus = 'upcoming' | 'locked' | 'in_progress' | 'completed'
 
 export interface User {
   id: string
@@ -7,30 +7,53 @@ export interface User {
   created_at: string
 }
 
-export interface Tournament {
-  id: string
-  name: string
-  sport: string
-  start_datetime: string
-  status: TournamentStatus
-  teams: string[]
-  created_at: string
-}
-
 export interface Pool {
   id: string
-  tournament_id: string
   creator_id: string
   name: string
   description: string | null
+  sport: string
+  status: PoolStatus
+  teams: string[]
+  has_group_stage: boolean
+  advance_per_group: number | null
+  start_datetime: string
   invite_code: string
   created_at: string
+}
+
+export interface Group {
+  id: string
+  pool_id: string
+  name: string
+  teams: string[]
+  advancing_teams: string[] | null
+}
+
+export interface KnockoutMatchup {
+  id: string
+  pool_id: string
+  round: number
+  matchup_index: number
+  team_a: string | null
+  team_b: string | null
+  group_source_a: string | null
+  group_source_b: string | null
 }
 
 export interface PoolMember {
   pool_id: string
   user_id: string
   joined_at: string
+}
+
+export interface GroupPick {
+  id: string
+  pool_id: string
+  user_id: string
+  group_id: string
+  advancing_teams: string[]
+  submitted_at: string | null
 }
 
 export interface Pick {
@@ -45,7 +68,7 @@ export interface Pick {
 
 export interface Result {
   id: string
-  tournament_id: string
+  pool_id: string
   round: number
   matchup_index: number
   winning_team: string
