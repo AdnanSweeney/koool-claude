@@ -17,6 +17,7 @@ export interface Pool {
   teams: string[]
   has_group_stage: boolean
   advance_per_group: number | null
+  additional_advancing: number
   start_datetime: string
   invite_code: string
   created_at: string

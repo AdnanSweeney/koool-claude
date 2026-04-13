@@ -40,6 +40,11 @@ export const stepGroupsSchema = z.object({
     .number()
     .int()
     .min(1, 'At least 1 team must advance per group'),
+  additional_advancing: z
+    .number()
+    .int()
+    .min(0)
+    .default(0),
 }).refine(
   (data) => data.groups.every((g) => g.teams.length > data.advance_per_group),
   { message: 'Each group must have more teams than the number that advance' },

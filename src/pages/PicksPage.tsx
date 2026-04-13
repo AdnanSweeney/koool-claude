@@ -38,21 +38,31 @@ interface OtherMember {
   display_name: string
   knockout_picks: PickChoice[]
   group_picks: GroupPick[]
+  third_place_selections: string[]
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Resolve a group source label like "A1" or "B2" to the actual team name
- * predicted by the user in their group rankings.
+ * Resolve a group source label like "A1", "B2", or "3rd-1" to the actual team name
+ * predicted by the user in their group rankings (or third-place selections).
  * Falls back to the raw label if no ranking exists yet.
  */
 function resolveGroupSource(
   source: string | null,
   groups: GroupType[],
   groupRankings: Map<string, string[]>,
+  thirdPlaceSelections: string[] = [],
 ): string | null {
   if (!source) return null
+
+  // Handle "3rd-N" labels
+  const thirdMatch = source.match(/^3rd-(\d+)$/)
+  if (thirdMatch) {
+    const idx = parseInt(thirdMatch[1], 10) - 1
+    return thirdPlaceSelections[idx] ?? source
+  }
+
   // Format: "A1" — first char is group prefix, remainder is 1-based position
   const prefix = source.charAt(0)
   const pos = parseInt(source.slice(1), 10)
@@ -82,15 +92,16 @@ function resolveMatchupTeams(
   matchups: KnockoutMatchup[],
   groups: GroupType[],
   groupRankings: Map<string, string[]>,
+  thirdPlaceSelections: string[] = [],
 ): KnockoutMatchup[] {
   if (groups.length === 0) return matchups
   return matchups.map((m) => ({
     ...m,
     team_a: m.group_source_a
-      ? resolveGroupSource(m.group_source_a, groups, groupRankings) ?? m.team_a
+      ? resolveGroupSource(m.group_source_a, groups, groupRankings, thirdPlaceSelections) ?? m.team_a
       : m.team_a,
     team_b: m.group_source_b
-      ? resolveGroupSource(m.group_source_b, groups, groupRankings) ?? m.team_b
+      ? resolveGroupSource(m.group_source_b, groups, groupRankings, thirdPlaceSelections) ?? m.team_b
       : m.team_b,
   }))
 }
@@ -102,6 +113,7 @@ function resolveMatchupTeams(
 function buildGroupSourceMap(
   groups: GroupType[],
   groupRankings: Map<string, string[]>,
+  thirdPlaceSelections: string[] = [],
 ): Map<string, string> {
   const map = new Map<string, string>()
   for (const group of groups) {
@@ -112,6 +124,9 @@ function buildGroupSourceMap(
       map.set(`${prefix}${i + 1}`, team)
     })
   }
+  thirdPlaceSelections.forEach((team, i) => {
+    map.set(`3rd-${i + 1}`, team)
+  })
   return map
 }
 
@@ -177,6 +192,7 @@ export default function PicksPage() {
   // ── User's picks
   const [picks, setPicks] = useState<PickChoice[]>([])
   const [groupRankings, setGroupRankings] = useState<Map<string, string[]>>(new Map())
+  const [thirdPlaceSelections, setThirdPlaceSelections] = useState<string[]>([])
   const [bonusAnswers, setBonusAnswers] = useState<Map<string, string>>(new Map())
   const [hasSubmitted, setHasSubmitted] = useState(false)
 
@@ -193,7 +209,7 @@ export default function PicksPage() {
 
   const loadOthers = useCallback(
     async (poolId: string, currentUserId: string) => {
-      const [membersRes, allPicksRes, allGroupPicksRes] = await Promise.all([
+      const [membersRes, allPicksRes, allGroupPicksRes, allThirdPlaceRes] = await Promise.all([
         supabase.from('pool_members').select('user_id, users(display_name)').eq('pool_id', poolId),
         supabase.from('picks').select('*').eq('pool_id', poolId).not('submitted_at', 'is', null),
         supabase
@@ -201,7 +217,10 @@ export default function PicksPage() {
           .select('*')
           .eq('pool_id', poolId)
           .not('submitted_at', 'is', null),
+        supabase.from('third_place_picks').select('*').eq('pool_id', poolId),
       ])
+
+      const thirdPlaceData = (allThirdPlaceRes.data ?? []) as Array<{ user_id: string; selected_teams: string[] }>
 
       const others: OtherMember[] = []
       for (const member of membersRes.data ?? []) {
@@ -213,12 +232,14 @@ export default function PicksPage() {
         const gPicks = ((allGroupPicksRes.data ?? []) as GroupPick[]).filter(
           (p) => p.user_id === member.user_id,
         )
+        const tpPick = thirdPlaceData.find((tp) => tp.user_id === member.user_id)
         if (kPicks.length > 0 || gPicks.length > 0) {
           others.push({
             user_id: member.user_id,
             display_name: user?.display_name ?? 'Unknown',
             knockout_picks: kPicks,
             group_picks: gPicks,
+            third_place_selections: (tpPick?.selected_teams ?? []) as string[],
           })
         }
       }
@@ -319,6 +340,19 @@ export default function PicksPage() {
       }
       setGroupRankings(rankMap)
 
+      // Restore third-place selections
+      if ((typedPool.additional_advancing ?? 0) > 0) {
+        const tpRes = await supabase
+          .from('third_place_picks')
+          .select('selected_teams')
+          .eq('pool_id', id!)
+          .eq('user_id', userId)
+          .maybeSingle()
+        if (tpRes.data?.selected_teams) {
+          setThirdPlaceSelections(tpRes.data.selected_teams as string[])
+        }
+      }
+
       if (submitted) {
         await loadOthers(id!, userId)
       }
@@ -339,7 +373,7 @@ export default function PicksPage() {
 
   const teamCount =
     pool?.has_group_stage && pool.advance_per_group
-      ? groups.length * pool.advance_per_group
+      ? groups.length * pool.advance_per_group + (pool.additional_advancing ?? 0)
       : (pool?.teams as string[] | undefined)?.length ?? 0
 
   const totalRounds = getRoundCount(teamCount)
@@ -387,6 +421,15 @@ export default function PicksPage() {
       }
     }
 
+    // Validate third-place selections
+    const additionalCount = pool.additional_advancing ?? 0
+    if (pool.has_group_stage && additionalCount > 0) {
+      if (thirdPlaceSelections.length !== additionalCount) {
+        toast.error(`Please select ${additionalCount} advancing third-place teams`)
+        return false
+      }
+    }
+
     // Validate knockout picks: final must be picked
     if (totalRounds > 0) {
       const hasFinal = picks.some((p) => p.round === totalRounds && p.matchup_index === 0)
@@ -412,6 +455,20 @@ export default function PicksPage() {
         )
         if (error) throw error
       }
+    }
+
+    // Upsert third-place selections
+    if (pool.has_group_stage && (pool.additional_advancing ?? 0) > 0 && thirdPlaceSelections.length > 0) {
+      const { error } = await supabase.from('third_place_picks').upsert(
+        {
+          pool_id: pool.id,
+          user_id: userId,
+          selected_teams: thirdPlaceSelections,
+          submitted_at: submittedAt,
+        },
+        { onConflict: 'pool_id,user_id' },
+      )
+      if (error) throw error
     }
 
     // Upsert knockout picks (all rounds)
@@ -582,6 +639,116 @@ export default function PicksPage() {
           </section>
         )}
 
+        {/* ── Third-place picker ─────────────────────────────────────────── */}
+        {pool.has_group_stage && (pool.additional_advancing ?? 0) > 0 && groups.length > 0 && (() => {
+          const advanceCount = pool.advance_per_group ?? 1
+          const additionalCount = pool.additional_advancing ?? 0
+          // Derive predicted third-place teams from user's group rankings
+          const thirdPlaceTeams = groups.map((group) => {
+            const ranking = groupRankings.get(group.id) ?? (group.teams as string[])
+            return ranking[advanceCount] ?? null // position after last advancing spot
+          }).filter((t): t is string => t !== null)
+
+          const toggleThirdPlace = (team: string) => {
+            if (isReadOnly) return
+            setThirdPlaceSelections((prev) => {
+              if (prev.includes(team)) {
+                return prev.filter((t) => t !== team)
+              }
+              if (prev.length >= additionalCount) return prev
+              return [...prev, team]
+            })
+          }
+
+          const moveThirdPlace = (from: number, to: number) => {
+            if (isReadOnly) return
+            setThirdPlaceSelections((prev) => {
+              const next = [...prev]
+              const [moved] = next.splice(from, 1)
+              next.splice(to, 0, moved)
+              return next
+            })
+          }
+
+          return (
+            <section>
+              <h2 className="mb-1 text-lg font-semibold">Best Third-Place Teams</h2>
+              <p className="mb-4 text-sm text-muted-foreground">
+                Select {additionalCount} third-place teams you predict will advance to the knockout stage.
+                {thirdPlaceSelections.length > 0 && ' Drag to reorder — order determines bracket position (3rd-1, 3rd-2, etc.).'}
+              </p>
+
+              {/* Available third-place teams */}
+              <div className="mb-4 space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Select teams ({thirdPlaceSelections.length}/{additionalCount})
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {thirdPlaceTeams.map((team) => {
+                    const selected = thirdPlaceSelections.includes(team)
+                    return (
+                      <button
+                        key={team}
+                        type="button"
+                        disabled={isReadOnly}
+                        onClick={() => toggleThirdPlace(team)}
+                        className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                          selected
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-input hover:bg-muted'
+                        } ${isReadOnly ? 'cursor-default' : 'cursor-pointer'}`}
+                      >
+                        {team}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Ordered assignments */}
+              {thirdPlaceSelections.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Bracket slot assignments
+                  </p>
+                  <div className="rounded-md border divide-y">
+                    {thirdPlaceSelections.map((team, i) => (
+                      <div key={team} className="flex items-center justify-between px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="font-mono text-xs">
+                            3rd-{i + 1}
+                          </Badge>
+                          <span className="text-sm">{team}</span>
+                        </div>
+                        {!isReadOnly && thirdPlaceSelections.length > 1 && (
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              disabled={i === 0}
+                              onClick={() => moveThirdPlace(i, i - 1)}
+                              className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-30"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              disabled={i === thirdPlaceSelections.length - 1}
+                              onClick={() => moveThirdPlace(i, i + 1)}
+                              className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted disabled:opacity-30"
+                            >
+                              ↓
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+          )
+        })()}
+
         {/* ── Knockout bracket ─────────────────────────────────────────────── */}
         <section>
           <h2 className="mb-1 text-lg font-semibold">Knockout Bracket</h2>
@@ -599,10 +766,10 @@ export default function PicksPage() {
                 </p>
               )}
               <BracketCanvas
-                matchups={resolveMatchupTeams(matchups, groups, groupRankings)}
+                matchups={resolveMatchupTeams(matchups, groups, groupRankings, thirdPlaceSelections)}
                 teamCount={teamCount}
                 mode="pick"
-                picks={resolvePicks(picks, buildGroupSourceMap(groups, groupRankings))}
+                picks={resolvePicks(picks, buildGroupSourceMap(groups, groupRankings, thirdPlaceSelections))}
                 results={results}
                 onPick={handleKnockoutPick}
                 disabled={isReadOnly}
@@ -732,14 +899,15 @@ export default function PicksPage() {
                             {member.knockout_picks.length > 0 && matchups.length > 0 && (
                               (() => {
                                 const memberRankings = buildRankingsFromGroupPicks(groups, member.group_picks)
-                                const memberSourceMap = buildGroupSourceMap(groups, memberRankings)
+                                const memberThirdPlace = member.third_place_selections
+                                const memberSourceMap = buildGroupSourceMap(groups, memberRankings, memberThirdPlace)
                                 return (
                                   <div>
                                     <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                       Bracket Picks
                                     </p>
                                     <BracketCanvas
-                                      matchups={resolveMatchupTeams(matchups, groups, memberRankings)}
+                                      matchups={resolveMatchupTeams(matchups, groups, memberRankings, memberThirdPlace)}
                                       teamCount={teamCount}
                                       mode="view"
                                       picks={resolvePicks(member.knockout_picks, memberSourceMap)}

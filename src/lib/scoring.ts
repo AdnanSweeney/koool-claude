@@ -38,6 +38,15 @@ export function computeKnockoutScore(
 }
 
 /**
+ * Score bonus questions: sum of points_awarded.
+ */
+export function computeBonusScore(
+  bonusScores: Array<{ points_awarded: number }>,
+): number {
+  return bonusScores.reduce((sum, s) => sum + s.points_awarded, 0)
+}
+
+/**
  * Combine all score sources into a total.
  */
 export function computeTotalScore(

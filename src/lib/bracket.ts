@@ -63,10 +63,14 @@ export function getKnockoutTeamCount(
 /**
  * Generate group source labels for knockout matchups fed by group stage.
  * E.g., for 4 groups advancing top 2: ["A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2"]
+ *
+ * When additionalAdvancing > 0, appends labels "3rd-1", "3rd-2", etc. for
+ * best third-place (or Nth-place) teams that also advance.
  */
 export function generateGroupSourceLabels(
   groupNames: string[],
   advancePerGroup: number,
+  additionalAdvancing: number = 0,
 ): string[] {
   const labels: string[] = []
   for (const name of groupNames) {
@@ -75,6 +79,9 @@ export function generateGroupSourceLabels(
     for (let pos = 1; pos <= advancePerGroup; pos++) {
       labels.push(`${prefix}${pos}`)
     }
+  }
+  for (let i = 1; i <= additionalAdvancing; i++) {
+    labels.push(`3rd-${i}`)
   }
   return labels
 }

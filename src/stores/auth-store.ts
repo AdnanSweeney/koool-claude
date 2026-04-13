@@ -9,8 +9,9 @@ interface AuthState {
   loading: boolean
   initialize: () => () => void
   fetchProfile: (userId: string) => Promise<void>
-  signInWithGoogle: () => Promise<void>
-  signInWithMagicLink: (email: string) => Promise<void>
+  signInWithGoogle: (redirectPath?: string) => Promise<void>
+  signInWithMagicLink: (email: string, redirectPath?: string) => Promise<void>
+  verifyOtp: (email: string, token: string) => Promise<void>
   signOut: () => Promise<void>
   setProfile: (profile: User) => void
 }
@@ -21,7 +22,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loading: true,
 
   initialize: () => {
-    // Get the initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       set({ session })
       if (session?.user) {
@@ -31,7 +31,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     })
 
-    // Subscribe to auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -62,7 +61,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ profile: data as User, loading: false })
   },
 
-  signInWithGoogle: async () => {
+  signInWithGoogle: async (redirectPath?: string) => {
+    if (redirectPath) {
+      localStorage.setItem('postAuthRedirect', redirectPath)
+    }
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -72,12 +74,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (error) throw error
   },
 
-  signInWithMagicLink: async (email: string) => {
+  signInWithMagicLink: async (email: string, redirectPath?: string) => {
+    const callbackUrl = new URL('/auth/callback', window.location.origin)
+    if (redirectPath) {
+      callbackUrl.searchParams.set('next', redirectPath)
+    }
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: callbackUrl.toString(),
       },
+    })
+    if (error) throw error
+  },
+
+  verifyOtp: async (email: string, token: string) => {
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: 'email',
     })
     if (error) throw error
   },

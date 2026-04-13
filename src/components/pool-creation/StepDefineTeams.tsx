@@ -5,6 +5,7 @@ import { stepTeamsSchema, type StepTeamsData } from '@/lib/validation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 
 interface Props {
   defaultValues: StepTeamsData
@@ -17,6 +18,8 @@ export default function StepDefineTeams({ defaultValues, onNext, onBack }: Props
     defaultValues.teams.length > 0 ? defaultValues.teams : ['', ''],
   )
   const [newTeam, setNewTeam] = useState('')
+  const [showBulk, setShowBulk] = useState(false)
+  const [bulkText, setBulkText] = useState('')
 
   const {
     handleSubmit,
@@ -49,6 +52,24 @@ export default function StepDefineTeams({ defaultValues, onNext, onBack }: Props
     updated[index] = value
     syncForm(updated)
   }
+
+  const addBulkTeams = () => {
+    const parsed = bulkText
+      .split(/[,\n]/)
+      .map((t) => t.trim())
+      .filter((t) => t)
+    if (parsed.length === 0) return
+    const existing = new Set(teams.filter((t) => t.trim()).map((t) => t.toLowerCase()))
+    const deduped = parsed.filter((t) => !existing.has(t.toLowerCase()))
+    syncForm([...teams.filter((t) => t.trim()), ...deduped])
+    setBulkText('')
+    setShowBulk(false)
+  }
+
+  const bulkCount = bulkText
+    .split(/[,\n]/)
+    .map((t) => t.trim())
+    .filter((t) => t).length
 
   const handlePaste = (text: string) => {
     const pasted = text
@@ -122,7 +143,33 @@ export default function StepDefineTeams({ defaultValues, onNext, onBack }: Props
         <Button type="button" variant="outline" onClick={addTeam}>
           Add
         </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => setShowBulk(!showBulk)}
+        >
+          {showBulk ? 'Cancel' : 'Bulk Add'}
+        </Button>
       </div>
+
+      {showBulk && (
+        <div className="space-y-2 rounded-md border border-border p-3">
+          <Textarea
+            placeholder="Paste or type team names, one per line..."
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            rows={8}
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">
+              {bulkCount} team{bulkCount !== 1 ? 's' : ''} detected
+            </span>
+            <Button type="button" size="sm" onClick={addBulkTeams} disabled={bulkCount === 0}>
+              Add {bulkCount} Team{bulkCount !== 1 ? 's' : ''}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {errors.teams && (
         <p className="text-xs text-destructive">{errors.teams.message}</p>

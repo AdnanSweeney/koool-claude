@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import GroupTable from '@/components/GroupTable'
 import BracketView from '@/components/BracketView'
+import Leaderboard from '@/components/Leaderboard'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import type { Pool, PoolStatus, Group as GroupType, KnockoutMatchup } from '@/types'
 
@@ -254,12 +255,15 @@ export default function PoolDashboardPage() {
               matchups={matchups}
               teamCount={
                 pool.has_group_stage && pool.advance_per_group
-                  ? groups.length * pool.advance_per_group
+                  ? groups.length * pool.advance_per_group + (pool.additional_advancing ?? 0)
                   : (pool.teams as string[]).length
               }
             />
           </section>
         )}
+
+        {/* Leaderboard */}
+        <Leaderboard pool={pool} groups={groups} />
 
         {/* Invite Section */}
         <Card>

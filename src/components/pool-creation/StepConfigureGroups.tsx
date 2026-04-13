@@ -28,6 +28,7 @@ const GROUP_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 export default function StepConfigureGroups({ teams, defaultValues, onNext, onBack }: Props) {
   const [groupCount, setGroupCount] = useState(defaultValues?.groups.length ?? 2)
   const [advancePerGroup, setAdvancePerGroup] = useState(defaultValues?.advance_per_group ?? 1)
+  const [additionalAdvancing, setAdditionalAdvancing] = useState(defaultValues?.additional_advancing ?? 0)
   const [groups, setGroups] = useState<GroupDraft[]>(() => {
     if (defaultValues) {
       return defaultValues.groups.map((g) => ({ name: g.name, teams: [...g.teams] }))
@@ -107,6 +108,7 @@ export default function StepConfigureGroups({ teams, defaultValues, onNext, onBa
     onNext({
       groups: groups.map((g) => ({ name: g.name, teams: g.teams })),
       advance_per_group: advancePerGroup,
+      additional_advancing: additionalAdvancing,
     })
   }
 
@@ -154,6 +156,21 @@ export default function StepConfigureGroups({ teams, defaultValues, onNext, onBa
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Additional Advancing Teams</Label>
+        <p className="text-xs text-muted-foreground">
+          e.g. best 8 third-place teams in a World Cup format. Set to 0 for none.
+        </p>
+        <Input
+          type="number"
+          min={0}
+          max={groupCount}
+          className="w-24"
+          value={additionalAdvancing}
+          onChange={(e) => setAdditionalAdvancing(Math.max(0, parseInt(e.target.value, 10) || 0))}
+        />
       </div>
 
       <Button type="button" variant="outline" size="sm" onClick={autoDistribute}>

@@ -81,6 +81,7 @@ export default function CreatePoolPage() {
           teams: teamsData.teams,
           has_group_stage: basicInfo.has_group_stage,
           advance_per_group: groupsData?.advance_per_group ?? null,
+          additional_advancing: groupsData?.additional_advancing ?? 0,
           start_datetime: new Date(basicInfo.start_datetime).toISOString(),
           invite_code: inviteCode,
         })

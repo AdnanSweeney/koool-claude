@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -23,10 +23,14 @@ const magicLinkSchema = z.object({
 type MagicLinkForm = z.infer<typeof magicLinkSchema>
 
 export default function AuthPage() {
-  const { session, loading, signInWithGoogle, signInWithMagicLink } =
+  const navigate = useNavigate()
+  const { session, loading, signInWithGoogle, signInWithMagicLink, verifyOtp } =
     useAuthStore()
   const [magicLinkSent, setMagicLinkSent] = useState(false)
+  const [sentEmail, setSentEmail] = useState('')
   const [magicLinkLoading, setMagicLinkLoading] = useState(false)
+  const [otpCode, setOtpCode] = useState('')
+  const [otpLoading, setOtpLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const {
@@ -63,11 +67,26 @@ export default function AuthPage() {
       setError(null)
       setMagicLinkLoading(true)
       await signInWithMagicLink(data.email)
+      setSentEmail(data.email)
       setMagicLinkSent(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send magic link')
     } finally {
       setMagicLinkLoading(false)
+    }
+  }
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode.trim() || !sentEmail) return
+    try {
+      setError(null)
+      setOtpLoading(true)
+      await verifyOtp(sentEmail, otpCode.trim())
+      navigate('/dashboard', { replace: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid code — please try again')
+    } finally {
+      setOtpLoading(false)
     }
   }
 
@@ -120,17 +139,34 @@ export default function AuthPage() {
           </div>
 
           {magicLinkSent ? (
-            <div className="text-center space-y-2">
-              <p className="text-sm font-medium text-foreground">
-                Check your email!
-              </p>
-              <p className="text-sm text-muted-foreground">
-                We sent a magic link to your inbox. Click it to sign in.
-              </p>
+            <div className="space-y-3">
+              <div className="text-center space-y-1">
+                <p className="text-sm font-medium">Check your email!</p>
+                <p className="text-xs text-muted-foreground">
+                  Click the link in the email, or enter the code below.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="otp">6-digit code</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="otp"
+                    placeholder="123456"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleVerifyOtp()}
+                    maxLength={6}
+                  />
+                  <Button variant="outline" onClick={handleVerifyOtp} disabled={otpLoading}>
+                    {otpLoading ? 'Verifying…' : 'Verify'}
+                  </Button>
+                </div>
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setMagicLinkSent(false)}
+                className="w-full"
+                onClick={() => { setMagicLinkSent(false); setOtpCode('') }}
               >
                 Try a different email
               </Button>

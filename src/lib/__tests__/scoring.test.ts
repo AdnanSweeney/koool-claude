@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeGroupScore, computeKnockoutScore, computeTotalScore } from '../scoring'
+import { computeGroupScore, computeKnockoutScore, computeBonusScore, computeTotalScore } from '../scoring'
 
 describe('computeGroupScore', () => {
   it('returns 0 when no picks match', () => {
@@ -92,6 +92,30 @@ describe('computeKnockoutScore', () => {
 
   it('returns 0 for empty picks', () => {
     expect(computeKnockoutScore([], [])).toBe(0)
+  })
+})
+
+describe('computeBonusScore', () => {
+  it('returns 0 for empty scores', () => {
+    expect(computeBonusScore([])).toBe(0)
+  })
+
+  it('sums points_awarded', () => {
+    const scores = [
+      { points_awarded: 3 },
+      { points_awarded: 5 },
+      { points_awarded: 2 },
+    ]
+    expect(computeBonusScore(scores)).toBe(10)
+  })
+
+  it('handles single score', () => {
+    expect(computeBonusScore([{ points_awarded: 7 }])).toBe(7)
+  })
+
+  it('handles zero points', () => {
+    const scores = [{ points_awarded: 0 }, { points_awarded: 0 }]
+    expect(computeBonusScore(scores)).toBe(0)
   })
 })
 

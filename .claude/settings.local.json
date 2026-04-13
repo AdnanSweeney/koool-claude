@@ -35,7 +35,9 @@
       "Bash(supabase db:*)",
       "Bash(supabase migration:*)",
       "Bash(psql:*)",
-      "Bash(pnpm tsc:*)"
+      "Bash(pnpm tsc:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

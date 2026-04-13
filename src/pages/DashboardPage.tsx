@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import type { Pool, PoolStatus } from '@/types'
 
@@ -28,19 +29,38 @@ const statusLabel: Record<PoolStatus, string> = {
 }
 
 export default function DashboardPage() {
-  const { profile, signOut } = useAuthStore()
+  const { profile, session, signOut } = useAuthStore()
+  const navigate = useNavigate()
   const [pools, setPools] = useState<PoolWithCount[]>([])
   const [loading, setLoading] = useState(true)
+  const [inviteInput, setInviteInput] = useState('')
 
   useEffect(() => {
+    if (!session?.user) return
+
     async function load() {
+      const userId = session!.user.id
+
+      // Only fetch pools the user is a member of
+      const { data: memberRows } = await supabase
+        .from('pool_members')
+        .select('pool_id')
+        .eq('user_id', userId)
+
+      const poolIds = memberRows?.map((r) => r.pool_id) ?? []
+
+      if (poolIds.length === 0) {
+        setLoading(false)
+        return
+      }
+
       const { data: poolsData } = await supabase
         .from('pools')
         .select('*')
+        .in('id', poolIds)
         .order('created_at', { ascending: false })
 
       if (poolsData && poolsData.length > 0) {
-        const poolIds = poolsData.map((p) => p.id)
         const { data: members } = await supabase
           .from('pool_members')
           .select('pool_id')
@@ -63,7 +83,16 @@ export default function DashboardPage() {
     }
 
     load()
-  }, [])
+  }, [session])
+
+  const handleJoinByCode = () => {
+    const trimmed = inviteInput.trim()
+    if (!trimmed) return
+    // Accept either a full URL or a bare invite code
+    const match = trimmed.match(/\/join\/([A-Za-z0-9]+)/)
+    const code = match ? match[1] : trimmed
+    navigate(`/join/${code}`)
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -91,6 +120,18 @@ export default function DashboardPage() {
             </Button>
           </div>
 
+          <div className="mb-4 flex gap-2">
+            <Input
+              placeholder="Paste an invite link or code to join a pool"
+              value={inviteInput}
+              onChange={(e) => setInviteInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleJoinByCode()}
+            />
+            <Button variant="outline" onClick={handleJoinByCode}>
+              Join
+            </Button>
+          </div>
+
           {loading ? (
             <div className="flex flex-col gap-4">
               <Skeleton className="h-20 w-full" />
@@ -100,7 +141,7 @@ export default function DashboardPage() {
             <Card>
               <CardContent className="py-8 text-center">
                 <p className="text-muted-foreground">
-                  You haven't joined any pools yet.
+                  You haven't joined any pools yet. Paste an invite link above or create your own.
                 </p>
                 <Button asChild className="mt-4" variant="outline">
                   <Link to="/pools/create">Create your first pool</Link>

@@ -43,6 +43,7 @@ export default function StepConfigureBracket({
     ? generateGroupSourceLabels(
         groupsData.groups.map((g) => g.name),
         groupsData.advance_per_group,
+        groupsData.additional_advancing ?? 0,
       )
     : teams
 

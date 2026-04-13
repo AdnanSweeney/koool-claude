@@ -141,6 +141,25 @@ describe('generateGroupSourceLabels', () => {
     const labels = generateGroupSourceLabels(['A', 'B'], 2)
     expect(labels).toEqual(['A1', 'A2', 'B1', 'B2'])
   })
+
+  it('appends additional advancing labels (best 3rd place)', () => {
+    const labels = generateGroupSourceLabels(['Group A', 'Group B'], 2, 3)
+    expect(labels).toEqual(['A1', 'A2', 'B1', 'B2', '3rd-1', '3rd-2', '3rd-3'])
+  })
+
+  it('additional advancing defaults to 0', () => {
+    const labels = generateGroupSourceLabels(['Group A', 'Group B'], 2)
+    expect(labels).toEqual(['A1', 'A2', 'B1', 'B2'])
+  })
+
+  it('works with World Cup format: 12 groups, top 2 + 8 third-place', () => {
+    const groupNames = Array.from({ length: 12 }, (_, i) =>
+      `Group ${String.fromCharCode(65 + i)}`,
+    )
+    const labels = generateGroupSourceLabels(groupNames, 2, 8)
+    expect(labels).toHaveLength(32) // 24 per-group + 8 additional
+    expect(labels.slice(-3)).toEqual(['3rd-6', '3rd-7', '3rd-8'])
+  })
 })
 
 describe('getRoundName', () => {

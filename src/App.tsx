@@ -11,6 +11,7 @@ import CreatePoolPage from '@/pages/CreatePoolPage'
 import PoolDashboardPage from '@/pages/PoolDashboardPage'
 import PicksPage from '@/pages/PicksPage'
 import ManageResultsPage from '@/pages/ManageResultsPage'
+import MemberBracketPage from '@/pages/MemberBracketPage'
 import JoinPoolPage from '@/pages/JoinPoolPage'
 
 export default function App() {
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/pools/:id" element={<PoolDashboardPage />} />
           <Route path="/pools/:id/picks" element={<PicksPage />} />
           <Route path="/pools/:id/manage" element={<ManageResultsPage />} />
+          <Route path="/pools/:id/bracket/:userId" element={<MemberBracketPage />} />
         </Route>
       </Routes>
       <Toaster />

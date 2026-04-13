@@ -1,17 +1,24 @@
 import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 
 export default function AuthCallback() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   useEffect(() => {
-    supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN') {
-        navigate('/dashboard', { replace: true })
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        // Magic link encodes `next` in the URL; Google OAuth saves to localStorage
+        const redirectTo =
+          searchParams.get('next') ||
+          localStorage.getItem('postAuthRedirect') ||
+          '/dashboard'
+        localStorage.removeItem('postAuthRedirect')
+        navigate(redirectTo, { replace: true })
       }
     })
-  }, [navigate])
+  }, [navigate, searchParams])
 
   return (
     <div className="flex min-h-screen items-center justify-center">
