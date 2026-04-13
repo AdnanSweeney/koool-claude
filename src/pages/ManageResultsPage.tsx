@@ -28,6 +28,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Trash2 } from 'lucide-react'
+import { AppHeader } from '@/components/AppHeader'
 import type {
   Pool,
   PoolStatus,
@@ -96,6 +97,33 @@ async function populateKnockoutFromGroups(
     updated.push({ ...m, team_a: teamA, team_b: teamB })
   }
   return updated
+}
+
+/** Resolve group_source labels to team names for display (no DB writes) */
+function resolveMatchupsForDisplay(
+  matchups: KnockoutMatchup[],
+  groups: GroupType[],
+  groupRankings: Map<string, string[]>,
+  advancePerGroup: number,
+  thirdPlaceAssignments: string[] = [],
+): KnockoutMatchup[] {
+  const sourceMap = new Map<string, string>()
+  for (const group of groups) {
+    const prefix = group.name.replace(/^Group\s*/i, '').charAt(0).toUpperCase()
+    const ranking = groupRankings.get(group.id)
+    if (!ranking) continue
+    for (let i = 0; i < advancePerGroup && i < ranking.length; i++) {
+      sourceMap.set(`${prefix}${i + 1}`, ranking[i])
+    }
+  }
+  thirdPlaceAssignments.forEach((team, i) => {
+    sourceMap.set(`3rd-${i + 1}`, team)
+  })
+  return matchups.map((m) => ({
+    ...m,
+    team_a: (m.group_source_a ? sourceMap.get(m.group_source_a) ?? m.team_a : m.team_a) ?? null,
+    team_b: (m.group_source_b ? sourceMap.get(m.group_source_b) ?? m.team_b : m.team_b) ?? null,
+  }))
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -315,6 +343,31 @@ export default function ManageResultsPage() {
     }
   }
 
+  // ─── Third-place assignments ──────────────────────────────────────────────
+
+  const saveThirdPlaceAssignments = async () => {
+    if (!pool) return
+    try {
+      setSaving(true)
+      const advanceCount = pool.advance_per_group ?? 1
+      if (matchups.some((m) => m.group_source_a || m.group_source_b)) {
+        const updated = await populateKnockoutFromGroups(
+          matchups,
+          groups,
+          groupRankings,
+          advanceCount,
+          thirdPlaceAssignments,
+        )
+        setMatchups(updated)
+      }
+      toast.success('Third-place assignments saved! Bracket updated.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save third-place assignments')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // ─── Knockout results ─────────────────────────────────────────────────────
 
   function handleResultPick(round: number, matchupIndex: number, team: string) {
@@ -473,12 +526,8 @@ export default function ManageResultsPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <header className="border-b">
-          <div className="mx-auto max-w-5xl px-4 py-3">
-            <Skeleton className="h-6 w-48" />
-          </div>
-        </header>
-        <main className="mx-auto max-w-5xl space-y-6 px-4 py-8">
+        <AppHeader />
+        <main className="mx-auto max-w-5xl space-y-6 px-6 md:px-12 py-8">
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-48 w-full" />
           <Skeleton className="h-64 w-full" />
@@ -493,16 +542,13 @@ export default function ManageResultsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate(`/pools/${pool.id}`)}>
-            &larr; Pool
-          </Button>
-          <h1 className="text-lg font-bold">Manage Results</h1>
-        </div>
-      </header>
+      <AppHeader right={
+        <Button variant="ghost" size="sm" onClick={() => navigate(`/pools/${pool.id}`)}>
+          &larr; Pool
+        </Button>
+      } />
 
-      <main className="mx-auto max-w-5xl space-y-8 px-4 py-8">
+      <main className="mx-auto max-w-5xl space-y-8 px-6 md:px-12 py-8">
         {/* ── Pool Status ──────────────────────────────────────────────────── */}
         <Card>
           <CardHeader>
@@ -589,7 +635,6 @@ export default function ManageResultsPage() {
               <p className="mb-4 text-sm text-muted-foreground">
                 Select which {additionalCount} third-place teams actually advanced.
                 Order determines bracket slot assignment (3rd-1, 3rd-2, etc.).
-                Save group results after making your selections to update the bracket.
               </p>
 
               <div className="mb-4 space-y-1">
@@ -656,6 +701,11 @@ export default function ManageResultsPage() {
                   </div>
                 </div>
               )}
+              {thirdPlaceAssignments.length > 0 && (
+                <Button className="mt-3" onClick={saveThirdPlaceAssignments} disabled={saving}>
+                  {saving ? 'Saving...' : 'Save Third-Place Assignments'}
+                </Button>
+              )}
             </section>
           )
         })()}
@@ -677,7 +727,13 @@ export default function ManageResultsPage() {
                 Click the actual winner of each matchup. Results cascade through the bracket.
               </p>
               <BracketCanvas
-                matchups={matchups}
+                matchups={resolveMatchupsForDisplay(
+                  matchups,
+                  groups,
+                  groupRankings,
+                  pool.advance_per_group ?? 1,
+                  thirdPlaceAssignments,
+                )}
                 teamCount={teamCount}
                 mode="pick"
                 picks={resultPicks}

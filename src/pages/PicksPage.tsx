@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { getRoundCount, clearDownstreamPicks } from '@/lib/bracket'
 import BracketCanvas from '@/components/BracketCanvas'
 import GroupRankingTable from '@/components/GroupRankingTable'
-import { ThemeToggle } from '@/components/ThemeToggle'
+import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -294,6 +294,7 @@ export default function PicksPage() {
   // ─── Pick handlers ─────────────────────────────────────────────────────────
 
   const isReadOnly = hasSubmitted || pool?.status !== 'upcoming'
+  const bonusReadOnly = pool?.status !== 'upcoming'
 
   const teamCount =
     pool?.has_group_stage && pool.advance_per_group
@@ -442,6 +443,53 @@ export default function PicksPage() {
     }
   }
 
+  async function handleSaveThirdPlace() {
+    if (!pool || !session?.user) return
+    try {
+      setIsSaving(true)
+      const { error } = await supabase.from('third_place_picks').upsert(
+        {
+          pool_id: pool.id,
+          user_id: session.user.id,
+          selected_teams: thirdPlaceSelections,
+          submitted_at: null,
+        },
+        { onConflict: 'pool_id,user_id' },
+      )
+      if (error) throw error
+      toast.success('Third-place selections saved!')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save third-place selections')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleSaveBonus() {
+    if (!pool || !session?.user) return
+    try {
+      setIsSaving(true)
+      for (const [questionId, answerText] of bonusAnswers.entries()) {
+        if (!answerText.trim()) continue
+        const { error } = await supabase.from('bonus_answers').upsert(
+          {
+            bonus_question_id: questionId,
+            user_id: session.user.id,
+            answer_text: answerText.trim(),
+            submitted_at: new Date().toISOString(),
+          },
+          { onConflict: 'bonus_question_id,user_id' },
+        )
+        if (error) throw error
+      }
+      toast.success('Bonus answers saved!')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save bonus answers')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   async function handleSubmit() {
     setShowSubmitDialog(false)
     try {
@@ -464,12 +512,8 @@ export default function PicksPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <header className="border-b">
-          <div className="mx-auto max-w-4xl px-4 py-3">
-            <Skeleton className="h-6 w-40" />
-          </div>
-        </header>
-        <main className="mx-auto max-w-4xl space-y-6 px-4 py-8">
+        <AppHeader />
+        <main className="mx-auto max-w-4xl space-y-6 px-6 md:px-12 py-8">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-64 w-full" />
           <Skeleton className="h-48 w-full" />
@@ -483,15 +527,12 @@ export default function PicksPage() {
   if (!isMember) {
     return (
       <div className="min-h-screen bg-background">
-        <header className="border-b">
-          <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
-              &larr; Home
-            </Button>
-            <ThemeToggle />
-          </div>
-        </header>
-        <main className="mx-auto max-w-4xl px-4 py-16 text-center">
+        <AppHeader right={
+          <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
+            &larr; Home
+          </Button>
+        } />
+        <main className="mx-auto max-w-4xl px-6 md:px-12 py-16 text-center">
           <h2 className="mb-2 text-xl font-semibold">You're not a member of this pool</h2>
           <p className="mb-6 text-sm text-muted-foreground">
             You need to join via the invite link before you can enter picks.
@@ -508,19 +549,13 @@ export default function PicksPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate(`/pools/${pool.id}`)}>
-              &larr; Pool
-            </Button>
-            <h1 className="text-base font-bold">{pool.name} — Picks</h1>
-          </div>
-          <ThemeToggle />
-        </div>
-      </header>
+      <AppHeader right={
+        <Button variant="ghost" size="sm" onClick={() => navigate(`/pools/${pool.id}`)}>
+          &larr; Pool
+        </Button>
+      } />
 
-      <main className="mx-auto max-w-4xl space-y-8 px-4 py-8">
+      <main className="mx-auto max-w-4xl space-y-8 px-6 md:px-12 py-8">
         {/* Status banners */}
         {hasSubmitted && (
           <div className="flex items-center gap-2">
@@ -668,6 +703,17 @@ export default function PicksPage() {
                   </div>
                 </div>
               )}
+              {!isReadOnly && thirdPlaceSelections.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={handleSaveThirdPlace}
+                  disabled={isSaving}
+                >
+                  {isSaving ? 'Saving…' : 'Save Third-Place Selections'}
+                </Button>
+              )}
             </section>
           )
         })()}
@@ -721,7 +767,7 @@ export default function PicksPage() {
                     <Input
                       placeholder="Your answer…"
                       value={bonusAnswers.get(q.id) ?? ''}
-                      disabled={isReadOnly}
+                      disabled={bonusReadOnly}
                       onChange={(e) => {
                         const newMap = new Map(bonusAnswers)
                         newMap.set(q.id, e.target.value)
@@ -731,6 +777,11 @@ export default function PicksPage() {
                   </CardContent>
                 </Card>
               ))}
+              {!bonusReadOnly && isReadOnly && (
+                <Button variant="outline" onClick={handleSaveBonus} disabled={isSaving}>
+                  {isSaving ? 'Saving…' : 'Save Bonus Answers'}
+                </Button>
+              )}
             </div>
           </section>
         )}

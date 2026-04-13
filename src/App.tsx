@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Toaster } from '@/components/ui/sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import ProtectedRoute from '@/components/ProtectedRoute'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import LandingPage from '@/pages/LandingPage'
 import AuthPage from '@/pages/AuthPage'
 import AuthCallback from '@/pages/AuthCallback'
@@ -13,6 +14,7 @@ import PicksPage from '@/pages/PicksPage'
 import ManageResultsPage from '@/pages/ManageResultsPage'
 import MemberBracketPage from '@/pages/MemberBracketPage'
 import JoinPoolPage from '@/pages/JoinPoolPage'
+import NotFoundPage from '@/pages/NotFoundPage'
 
 export default function App() {
   const initialize = useAuthStore((s) => s.initialize)
@@ -23,22 +25,25 @@ export default function App() {
   }, [initialize])
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/auth" element={<AuthPage />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route path="/join/:inviteCode" element={<JoinPoolPage />} />
-        <Route element={<ProtectedRoute />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/pools/create" element={<CreatePoolPage />} />
-          <Route path="/pools/:id" element={<PoolDashboardPage />} />
-          <Route path="/pools/:id/picks" element={<PicksPage />} />
-          <Route path="/pools/:id/manage" element={<ManageResultsPage />} />
-          <Route path="/pools/:id/bracket/:userId" element={<MemberBracketPage />} />
-        </Route>
-      </Routes>
-      <Toaster />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/join/:inviteCode" element={<JoinPoolPage />} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/pools/create" element={<CreatePoolPage />} />
+            <Route path="/pools/:id" element={<PoolDashboardPage />} />
+            <Route path="/pools/:id/picks" element={<PicksPage />} />
+            <Route path="/pools/:id/manage" element={<ManageResultsPage />} />
+            <Route path="/pools/:id/bracket/:userId" element={<MemberBracketPage />} />
+          </Route>
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+        <Toaster />
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }

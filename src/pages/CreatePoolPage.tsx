@@ -155,7 +155,7 @@ export default function CreatePoolPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
-        <div className="mx-auto flex max-w-4xl items-center px-4 py-3">
+        <div className="mx-auto flex max-w-4xl items-center px-6 md:px-12 py-3">
           <button
             onClick={() => navigate('/dashboard')}
             className="text-sm text-muted-foreground hover:text-foreground"
@@ -165,7 +165,7 @@ export default function CreatePoolPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-lg px-4 py-8">
+      <main className="mx-auto max-w-lg px-6 md:px-12 py-8">
         {/* Step indicator */}
         <div className="mb-6 flex items-center justify-center gap-1">
           {activeSteps.map((stepIdx, i) => (

@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
+import { AppHeader } from '@/components/AppHeader'
 import type {
   Pool,
   Group as GroupType,
@@ -270,12 +271,8 @@ export default function MemberBracketPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <header className="border-b">
-          <div className="mx-auto max-w-5xl px-4 py-3">
-            <Skeleton className="h-6 w-48" />
-          </div>
-        </header>
-        <main className="mx-auto max-w-5xl space-y-6 px-4 py-8">
+        <AppHeader />
+        <main className="mx-auto max-w-5xl space-y-6 px-6 md:px-12 py-8">
           <Skeleton className="h-16 w-full" />
           <Skeleton className="h-64 w-full" />
         </main>
@@ -294,16 +291,13 @@ export default function MemberBracketPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate(`/pools/${pool.id}`)}>
-            &larr; Pool
-          </Button>
-          <h1 className="text-lg font-bold">{memberName}'s Picks</h1>
-        </div>
-      </header>
+      <AppHeader right={
+        <Button variant="ghost" size="sm" onClick={() => navigate(`/pools/${pool.id}`)}>
+          &larr; Pool
+        </Button>
+      } />
 
-      <main className="mx-auto max-w-5xl space-y-8 px-4 py-8">
+      <main className="mx-auto max-w-5xl space-y-8 px-6 md:px-12 py-8">
         {/* Score summary */}
         <Card>
           <CardContent className="py-4">

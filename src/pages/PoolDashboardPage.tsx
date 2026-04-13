@@ -14,8 +14,9 @@ import GroupTable from '@/components/GroupTable'
 import BracketView from '@/components/BracketView'
 import Leaderboard from '@/components/Leaderboard'
 import MembersPicksSection from '@/components/MembersPicksSection'
-import { ThemeToggle } from '@/components/ThemeToggle'
-import type { Pool, PoolStatus, Group as GroupType, KnockoutMatchup } from '@/types'
+import { AppHeader } from '@/components/AppHeader'
+import { CountdownTimer } from '@/components/CountdownTimer'
+import type { Pool, PoolStatus, Group as GroupType, KnockoutMatchup, BonusQuestion } from '@/types'
 
 interface MemberInfo {
   user_id: string
@@ -30,11 +31,18 @@ const statusLabel: Record<PoolStatus, string> = {
   completed: 'Completed',
 }
 
-const statusVariant: Record<PoolStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+const statusVariant: Record<PoolStatus, 'default' | 'secondary' | 'outline'> = {
   upcoming: 'default',
   locked: 'secondary',
-  in_progress: 'destructive',
+  in_progress: 'default',
   completed: 'outline',
+}
+
+const statusClassName: Record<PoolStatus, string> = {
+  upcoming: '',
+  locked: '',
+  in_progress: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/20',
+  completed: '',
 }
 
 const pickStatusLabel = {
@@ -58,11 +66,16 @@ export default function PoolDashboardPage() {
   const [groups, setGroups] = useState<GroupType[]>([])
   const [matchups, setMatchups] = useState<KnockoutMatchup[]>([])
   const [members, setMembers] = useState<MemberInfo[]>([])
+  const [bonusQuestions, setBonusQuestions] = useState<BonusQuestion[]>([])
+  const [myAnsweredCount, setMyAnsweredCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [emailInput, setEmailInput] = useState('')
   const [sendingInvites, setSendingInvites] = useState(false)
 
   const isCreator = pool?.creator_id === session?.user?.id
+  const myPickStatus = members.find((m) => m.user_id === session?.user?.id)?.pick_status
+  const unpickedMembers = members.filter((m) => m.pick_status !== 'submitted')
+  const unansweredBonus = bonusQuestions.length > 0 && myAnsweredCount < bonusQuestions.length
   const joinLink = `${window.location.origin}/join/${pool?.invite_code}`
 
   useEffect(() => {
@@ -84,18 +97,32 @@ export default function PoolDashboardPage() {
       const typedPool = poolData as Pool
       setPool(typedPool)
 
-      // Fetch groups, matchups, and members in parallel
-      const [groupsRes, matchupsRes, membersRes, picksRes] = await Promise.all([
+      // Fetch groups, matchups, members, bonus questions in parallel
+      const [groupsRes, matchupsRes, membersRes, picksRes, bonusRes] = await Promise.all([
         typedPool.has_group_stage
           ? supabase.from('groups').select('*').eq('pool_id', id!)
           : Promise.resolve({ data: [] }),
         supabase.from('knockout_matchups').select('*').eq('pool_id', id!),
         supabase.from('pool_members').select('user_id, users(display_name)').eq('pool_id', id!),
         supabase.from('picks').select('user_id, submitted_at').eq('pool_id', id!),
+        supabase.from('bonus_questions').select('*').eq('pool_id', id!),
       ])
 
       if (groupsRes.data) setGroups(groupsRes.data as GroupType[])
       if (matchupsRes.data) setMatchups(matchupsRes.data as KnockoutMatchup[])
+
+      const questions = (bonusRes.data ?? []) as BonusQuestion[]
+      setBonusQuestions(questions)
+
+      if (questions.length > 0) {
+        const questionIds = questions.map((q) => q.id)
+        const { data: answersData } = await supabase
+          .from('bonus_answers')
+          .select('bonus_question_id')
+          .in('bonus_question_id', questionIds)
+          .eq('user_id', session!.user.id)
+        setMyAnsweredCount(answersData?.length ?? 0)
+      }
 
       const r1Matchups = (matchupsRes.data ?? []).filter(
         (m: { round: number }) => m.round === 1,
@@ -179,12 +206,8 @@ export default function PoolDashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <header className="border-b">
-          <div className="mx-auto max-w-4xl px-4 py-3">
-            <Skeleton className="h-6 w-40" />
-          </div>
-        </header>
-        <main className="mx-auto max-w-4xl space-y-6 px-4 py-8">
+        <AppHeader />
+        <main className="mx-auto max-w-4xl space-y-6 px-6 md:px-12 py-8">
           <Skeleton className="h-32 w-full" />
           <Skeleton className="h-48 w-full" />
         </main>
@@ -196,33 +219,62 @@ export default function PoolDashboardPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
-            &larr; Dashboard
-          </Button>
-          <ThemeToggle />
-        </div>
-      </header>
+      <AppHeader right={
+        <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
+          &larr; Dashboard
+        </Button>
+      } />
 
-      <main className="mx-auto max-w-4xl space-y-6 px-4 py-8">
+      <main className="mx-auto max-w-4xl space-y-6 px-6 md:px-12 py-8">
         {/* Pool header */}
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">{pool.name}</h1>
-            <Badge variant={statusVariant[pool.status as PoolStatus]}>
+            <Badge
+              variant={statusVariant[pool.status as PoolStatus]}
+              className={statusClassName[pool.status as PoolStatus]}
+            >
               {statusLabel[pool.status as PoolStatus]}
             </Badge>
           </div>
-          <p className="mt-1 text-muted-foreground">
-            {pool.sport} &middot; {members.length}{' '}
-            {members.length === 1 ? 'member' : 'members'}
-            {pool.has_group_stage && ' \u00B7 Groups + Knockout'}
-          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
+            <span>
+              {pool.sport} &middot; {members.length}{' '}
+              {members.length === 1 ? 'member' : 'members'}
+              {pool.has_group_stage && ' \u00B7 Groups + Knockout'}
+            </span>
+            {pool.status === 'upcoming' && (
+              <CountdownTimer targetDate={pool.start_datetime} />
+            )}
+          </div>
           {pool.description && (
             <p className="mt-2 text-sm text-muted-foreground">{pool.description}</p>
           )}
         </div>
+
+        {/* Warning banners */}
+        {pool.status === 'upcoming' && myPickStatus !== 'submitted' && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+            {myPickStatus === 'in_progress'
+              ? "You have picks in progress — don't forget to submit before the pool locks."
+              : "You haven't entered your picks yet. Enter them before the pool locks!"}
+          </div>
+        )}
+        {unansweredBonus && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+            There {bonusQuestions.length - myAnsweredCount === 1 ? 'is' : 'are'}{' '}
+            {bonusQuestions.length - myAnsweredCount} unanswered bonus{' '}
+            {bonusQuestions.length - myAnsweredCount === 1 ? 'question' : 'questions'} — answer{' '}
+            {bonusQuestions.length - myAnsweredCount === 1 ? 'it' : 'them'} on the picks page.
+          </div>
+        )}
+        {isCreator && pool.status === 'upcoming' && unpickedMembers.length > 0 && (
+          <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+            {unpickedMembers.length}{' '}
+            {unpickedMembers.length === 1 ? 'member has' : 'members have'} not submitted picks:{' '}
+            {unpickedMembers.map((m) => m.display_name).join(', ')}
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex gap-3">

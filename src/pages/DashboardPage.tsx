@@ -7,18 +7,25 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
-import { ThemeToggle } from '@/components/ThemeToggle'
+import { AppHeader } from '@/components/AppHeader'
 import type { Pool, PoolStatus } from '@/types'
 
 interface PoolWithCount extends Pool {
   member_count: number
 }
 
-const statusVariant: Record<PoolStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+const statusVariant: Record<PoolStatus, 'default' | 'secondary' | 'outline'> = {
   upcoming: 'default',
   locked: 'secondary',
-  in_progress: 'destructive',
+  in_progress: 'default',
   completed: 'outline',
+}
+
+const statusClassName: Record<PoolStatus, string> = {
+  upcoming: '',
+  locked: '',
+  in_progress: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30',
+  completed: '',
 }
 
 const statusLabel: Record<PoolStatus, string> = {
@@ -29,7 +36,7 @@ const statusLabel: Record<PoolStatus, string> = {
 }
 
 export default function DashboardPage() {
-  const { profile, session, signOut } = useAuthStore()
+  const { session } = useAuthStore()
   const navigate = useNavigate()
   const [pools, setPools] = useState<PoolWithCount[]>([])
   const [loading, setLoading] = useState(true)
@@ -96,22 +103,9 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-          <h1 className="text-xl font-bold tracking-tight">Koool</h1>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              {profile?.display_name}
-            </span>
-            <ThemeToggle />
-            <Button variant="ghost" size="sm" onClick={signOut}>
-              Sign out
-            </Button>
-          </div>
-        </div>
-      </header>
+      <AppHeader />
 
-      <main className="mx-auto max-w-4xl space-y-8 px-4 py-8">
+      <main className="mx-auto max-w-4xl space-y-8 px-6 md:px-12 py-8">
         <section>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Your Pools</h2>
@@ -162,7 +156,10 @@ export default function DashboardPage() {
                           {pool.has_group_stage && ' \u00B7 Groups + Knockout'}
                         </p>
                       </div>
-                      <Badge variant={statusVariant[pool.status as PoolStatus]}>
+                      <Badge
+                        variant={statusVariant[pool.status as PoolStatus]}
+                        className={statusClassName[pool.status as PoolStatus]}
+                      >
                         {statusLabel[pool.status as PoolStatus]}
                       </Badge>
                     </CardContent>
