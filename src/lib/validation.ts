@@ -69,14 +69,21 @@ export const stepBracketSchema = z.object({
     .min(1, 'At least 1 matchup is required'),
 })
 
+export const stepScoringSchema = z.object({
+  group: z.number().min(0, 'Points must be 0 or more'),
+  knockout: z.array(z.number().min(0, 'Points must be 0 or more')).min(1),
+})
+
 export type StepBasicInfoData = z.infer<typeof stepBasicInfoSchema>
 export type StepTeamsData = z.infer<typeof stepTeamsSchema>
 export type StepGroupsData = z.infer<typeof stepGroupsSchema>
 export type StepBracketData = z.infer<typeof stepBracketSchema>
+export type StepScoringData = z.infer<typeof stepScoringSchema>
 
 export interface PoolWizardData {
   basicInfo: StepBasicInfoData
   teams: StepTeamsData
   groups: StepGroupsData | null
   bracket: StepBracketData
+  scoring: StepScoringData
 }

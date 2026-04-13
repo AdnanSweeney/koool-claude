@@ -237,8 +237,8 @@ export default function MemberBracketPage() {
         advancing_teams: (gp.advancing_teams as string[]).slice(0, typedPool.advance_per_group ?? 1),
       }))
 
-      const gPts = computeGroupScore(groupPickData, actualAdvancing)
-      const bPts = computeKnockoutScore(typedPicks, typedResults)
+      const gPts = computeGroupScore(groupPickData, actualAdvancing, typedPool.scoring.group)
+      const bPts = computeKnockoutScore(typedPicks, typedResults, typedPool.scoring.knockout)
 
       // Fetch bonus scores for this user (may already be loaded above, but safe to re-query)
       let bnPts = 0

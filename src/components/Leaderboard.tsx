@@ -6,6 +6,7 @@ import { computeGroupScore, computeKnockoutScore, computeBonusScore, computeTota
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import type {
   Pool,
@@ -68,12 +69,10 @@ export default function Leaderboard({ pool, groups }: LeaderboardProps) {
       const user = m.users as unknown as { display_name: string } | null
       const userId = m.user_id
 
-      // User's picks
       const userPicks = allPicks.filter((p) => p.user_id === userId)
       const userGroupPicks = allGroupPicks.filter((p) => p.user_id === userId)
       const userBonusScores = allBonusScores.filter((s) => s.user_id === userId)
 
-      // Determine status
       const submittedPicks = userPicks.filter((p) => p.submitted_at !== null)
       const submittedGroupPicks = userGroupPicks.filter((p) => p.submitted_at !== null)
       let status: LeaderboardEntry['status'] = 'not_started'
@@ -83,13 +82,13 @@ export default function Leaderboard({ pool, groups }: LeaderboardProps) {
         status = 'in_progress'
       }
 
-      // Compute scores
       const groupPickData = userGroupPicks.map((gp) => ({
         group_id: gp.group_id,
         advancing_teams: (gp.advancing_teams as string[]).slice(0, pool.advance_per_group ?? 1),
       }))
-      const groupPts = computeGroupScore(groupPickData, actualAdvancing)
-      const bracketPts = computeKnockoutScore(userPicks, results)
+
+      const groupPts = computeGroupScore(groupPickData, actualAdvancing, pool.scoring.group)
+      const bracketPts = computeKnockoutScore(userPicks, results, pool.scoring.knockout)
       const bonusPts = computeBonusScore(userBonusScores)
       const total = computeTotalScore(groupPts, bracketPts, bonusPts)
 
@@ -104,7 +103,6 @@ export default function Leaderboard({ pool, groups }: LeaderboardProps) {
       }
     })
 
-    // Sort by total descending
     leaderboard.sort((a, b) => b.total - a.total)
     setEntries(leaderboard)
     setLoading(false)
@@ -114,29 +112,22 @@ export default function Leaderboard({ pool, groups }: LeaderboardProps) {
     loadLeaderboard()
   }, [loadLeaderboard])
 
-  // Subscribe to results changes for live score updates
   useEffect(() => {
     const channel = supabase
       .channel(`results:${pool.id}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'results', filter: `pool_id=eq.${pool.id}` },
-        () => {
-          loadLeaderboard()
-        },
+        () => { loadLeaderboard() },
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'bonus_scores' },
-        () => {
-          loadLeaderboard()
-        },
+        () => { loadLeaderboard() },
       )
       .subscribe()
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => { supabase.removeChannel(channel) }
   }, [pool.id, loadLeaderboard])
 
   const statusLabel = {
@@ -177,6 +168,8 @@ export default function Leaderboard({ pool, groups }: LeaderboardProps) {
     )
   }
 
+  const myEntry = entries.find((e) => e.user_id === session?.user?.id)
+
   const handleRowClick = (userId: string) => {
     if (isLocked) {
       navigate(`/pools/${pool.id}/bracket/${userId}`)
@@ -189,6 +182,62 @@ export default function Leaderboard({ pool, groups }: LeaderboardProps) {
         <CardTitle className="text-base">Leaderboard</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
+        {/* Your Score */}
+        {myEntry && (
+          <div className="border-b px-4 py-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Your Score
+            </p>
+            <div className="flex flex-wrap gap-6">
+              {pool.has_group_stage && (
+                <div>
+                  <p className="text-2xl font-bold tabular-nums">{myEntry.group_pts}</p>
+                  <p className="text-xs text-muted-foreground">Group</p>
+                </div>
+              )}
+              <div>
+                <p className="text-2xl font-bold tabular-nums">{myEntry.bracket_pts}</p>
+                <p className="text-xs text-muted-foreground">Bracket</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold tabular-nums">{myEntry.bonus_pts}</p>
+                <p className="text-xs text-muted-foreground">Bonus</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold tabular-nums text-primary">{myEntry.total}</p>
+                <p className="text-xs text-muted-foreground">Total</p>
+              </div>
+            </div>
+
+            <Separator className="my-3" />
+
+            {/* Scoring rules */}
+            <p className="mb-1.5 text-xs font-medium text-muted-foreground">How points are scored</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              {pool.has_group_stage && (
+                <span>
+                  Group pick: {pool.scoring.group} pt{pool.scoring.group !== 1 ? 's' : ''}
+                </span>
+              )}
+              {pool.scoring.knockout.map((pts, i) => {
+                const n = pool.scoring.knockout.length
+                const label =
+                  i === n - 1 ? 'Final' :
+                  i === n - 2 ? 'Semi-final' :
+                  i === n - 3 ? 'Quarter-final' :
+                  `R${i + 1}`
+                return (
+                  <span key={i}>
+                    {label}: {pts} pt{pts !== 1 ? 's' : ''}
+                  </span>
+                )
+              })}
+              <span>Bonus: varies per question</span>
+            </div>
+          </div>
+        )}
+
+        {/* Leaderboard table */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>

@@ -9,18 +9,23 @@ import StepBasicInfo from '@/components/pool-creation/StepBasicInfo'
 import StepDefineTeams from '@/components/pool-creation/StepDefineTeams'
 import StepConfigureGroups from '@/components/pool-creation/StepConfigureGroups'
 import StepConfigureBracket from '@/components/pool-creation/StepConfigureBracket'
+import StepConfigureScoring from '@/components/pool-creation/StepConfigureScoring'
 import StepReview from '@/components/pool-creation/StepReview'
 import type {
   StepBasicInfoData,
   StepTeamsData,
   StepGroupsData,
   StepBracketData,
+  StepScoringData,
   PoolWizardData,
 } from '@/lib/validation'
 
 const MAX_POOLS_PER_USER = 5
 
-const STEP_LABELS = ['Basic Info', 'Teams', 'Groups', 'Bracket', 'Review']
+// Logical step indices:
+// 0 = BasicInfo, 1 = DefineTeams, 2 = ConfigureGroups,
+// 3 = ConfigureBracket, 4 = Scoring, 5 = Review
+const STEP_LABELS = ['Basic Info', 'Teams', 'Groups', 'Bracket', 'Scoring', 'Review']
 
 export default function CreatePoolPage() {
   const navigate = useNavigate()
@@ -39,11 +44,15 @@ export default function CreatePoolPage() {
   const [teamsData, setTeamsData] = useState<StepTeamsData>({ teams: [] })
   const [groupsData, setGroupsData] = useState<StepGroupsData | null>(null)
   const [bracketData, setBracketData] = useState<StepBracketData | null>(null)
+  const [scoringData, setScoringData] = useState<StepScoringData>({
+    group: 1,
+    knockout: [1, 2, 4, 8],
+  })
 
-  // Skip groups step if no group stage
+  // Skip groups step if no group stage; scoring (4) and review (5) always included
   const activeSteps = basicInfo.has_group_stage
-    ? [0, 1, 2, 3, 4]
-    : [0, 1, 3, 4]
+    ? [0, 1, 2, 3, 4, 5]
+    : [0, 1, 3, 4, 5]
 
   const currentStepIndex = activeSteps[step] ?? 0
 
@@ -84,6 +93,7 @@ export default function CreatePoolPage() {
           additional_advancing: groupsData?.additional_advancing ?? 0,
           start_datetime: new Date(basicInfo.start_datetime).toISOString(),
           invite_code: inviteCode,
+          scoring: scoringData,
         })
         .select()
         .single()
@@ -139,6 +149,7 @@ export default function CreatePoolPage() {
     teams: teamsData,
     groups: groupsData,
     bracket: bracketData ?? { matchups: [] },
+    scoring: scoringData,
   }
 
   return (
@@ -226,7 +237,20 @@ export default function CreatePoolPage() {
               />
             )}
 
-            {currentStepIndex === 4 && (
+            {currentStepIndex === 4 && bracketData && (
+              <StepConfigureScoring
+                hasGroupStage={basicInfo.has_group_stage}
+                bracketData={bracketData}
+                defaultValues={scoringData}
+                onNext={(data) => {
+                  setScoringData(data)
+                  goNext()
+                }}
+                onBack={goBack}
+              />
+            )}
+
+            {currentStepIndex === 5 && (
               <StepReview
                 data={wizardData}
                 onSubmit={handleSubmit}

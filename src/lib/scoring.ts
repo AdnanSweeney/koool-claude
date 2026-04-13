@@ -1,9 +1,10 @@
 /**
- * Score group picks: 1 point per correctly predicted advancing team.
+ * Score group picks: groupPts points per correctly predicted advancing team.
  */
 export function computeGroupScore(
   userGroupPicks: Array<{ group_id: string; advancing_teams: string[] }>,
   actualAdvancing: Array<{ group_id: string; advancing_teams: string[] }>,
+  groupPts: number = 1,
 ): number {
   let score = 0
   for (const pick of userGroupPicks) {
@@ -11,7 +12,7 @@ export function computeGroupScore(
     if (!actual) continue
     for (const team of pick.advancing_teams) {
       if (actual.advancing_teams.includes(team)) {
-        score += 1
+        score += groupPts
       }
     }
   }
@@ -19,11 +20,14 @@ export function computeGroupScore(
 }
 
 /**
- * Score knockout picks: 2^(round-1) points per correct pick.
+ * Score knockout picks.
+ * knockoutPts[round-1] gives the points for that round.
+ * Falls back to 2^(round-1) if the round exceeds the configured array.
  */
 export function computeKnockoutScore(
   userPicks: Array<{ round: number; matchup_index: number; picked_team: string }>,
   results: Array<{ round: number; matchup_index: number; winning_team: string }>,
+  knockoutPts: number[] = [1, 2, 4, 8],
 ): number {
   let score = 0
   for (const pick of userPicks) {
@@ -31,7 +35,7 @@ export function computeKnockoutScore(
       (r) => r.round === pick.round && r.matchup_index === pick.matchup_index,
     )
     if (result && result.winning_team === pick.picked_team) {
-      score += Math.pow(2, pick.round - 1)
+      score += knockoutPts[pick.round - 1] ?? Math.pow(2, pick.round - 1)
     }
   }
   return score

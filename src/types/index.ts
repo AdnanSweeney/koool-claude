@@ -1,5 +1,10 @@
 export type PoolStatus = 'upcoming' | 'locked' | 'in_progress' | 'completed'
 
+export interface ScoringConfig {
+  group: number      // pts per correct advancing team prediction
+  knockout: number[] // pts per round, 0-indexed: knockout[0]=R1, knockout[1]=R2, etc.
+}
+
 export interface User {
   id: string
   display_name: string
@@ -20,6 +25,7 @@ export interface Pool {
   additional_advancing: number
   start_datetime: string
   invite_code: string
+  scoring: ScoringConfig
   created_at: string
 }
 
@@ -92,6 +98,7 @@ export interface BonusAnswer {
   user_id: string
   answer_text: string
   submitted_at: string
+  display_name?: string
 }
 
 export interface BonusScore {

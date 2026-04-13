@@ -95,6 +95,43 @@ describe('computeKnockoutScore', () => {
   })
 })
 
+describe('computeGroupScore with custom groupPts', () => {
+  it('awards custom pts per correct pick', () => {
+    const picks = [{ group_id: 'g1', advancing_teams: ['A', 'B'] }]
+    const actual = [{ group_id: 'g1', advancing_teams: ['A', 'B'] }]
+    expect(computeGroupScore(picks, actual, 3)).toBe(6)
+  })
+
+  it('awards 0 pts when groupPts is 0', () => {
+    const picks = [{ group_id: 'g1', advancing_teams: ['A', 'B'] }]
+    const actual = [{ group_id: 'g1', advancing_teams: ['A', 'B'] }]
+    expect(computeGroupScore(picks, actual, 0)).toBe(0)
+  })
+})
+
+describe('computeKnockoutScore with custom knockoutPts', () => {
+  it('uses custom pts array instead of doubling pattern', () => {
+    const picks = [
+      { round: 1, matchup_index: 0, picked_team: 'A' },
+      { round: 2, matchup_index: 0, picked_team: 'A' },
+      { round: 3, matchup_index: 0, picked_team: 'A' },
+    ]
+    const results = [
+      { round: 1, matchup_index: 0, winning_team: 'A' },
+      { round: 2, matchup_index: 0, winning_team: 'A' },
+      { round: 3, matchup_index: 0, winning_team: 'A' },
+    ]
+    expect(computeKnockoutScore(picks, results, [5, 10, 15])).toBe(30)
+  })
+
+  it('falls back to 2^(round-1) when round exceeds knockoutPts array', () => {
+    const picks = [{ round: 5, matchup_index: 0, picked_team: 'A' }]
+    const results = [{ round: 5, matchup_index: 0, winning_team: 'A' }]
+    // knockoutPts has 4 entries, round 5 falls back to 2^4 = 16
+    expect(computeKnockoutScore(picks, results, [1, 2, 4, 8])).toBe(16)
+  })
+})
+
 describe('computeBonusScore', () => {
   it('returns 0 for empty scores', () => {
     expect(computeBonusScore([])).toBe(0)

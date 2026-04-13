@@ -146,13 +146,17 @@ export default function ManageResultsPage() {
 
     const qIds = questions.map((q) => q.id)
     const [answersRes, scoresRes] = await Promise.all([
-      supabase.from('bonus_answers').select('*').in('bonus_question_id', qIds),
+      supabase.from('bonus_answers').select('*, users(display_name)').in('bonus_question_id', qIds),
       supabase.from('bonus_scores').select('*').in('bonus_question_id', qIds),
     ])
 
     // Group answers by question
     const ansMap = new Map<string, BonusAnswer[]>()
-    for (const a of (answersRes.data ?? []) as BonusAnswer[]) {
+    for (const raw of (answersRes.data ?? [])) {
+      const a: BonusAnswer = {
+        ...(raw as BonusAnswer),
+        display_name: (raw.users as { display_name: string } | null)?.display_name ?? 'Unknown',
+      }
       const arr = ansMap.get(a.bonus_question_id) ?? []
       arr.push(a)
       ansMap.set(a.bonus_question_id, arr)
@@ -426,6 +430,7 @@ export default function ManageResultsPage() {
         else next.delete(questionId)
         return next
       })
+      toast.success('Correct answer saved')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save answer')
     }
@@ -760,8 +765,15 @@ export default function ManageResultsPage() {
                             onChange={(e) =>
                               setCorrectAnswers((prev) => new Map(prev).set(q.id, e.target.value))
                             }
-                            onBlur={() => saveCorrectAnswer(q.id, correctAnswers.get(q.id) ?? '')}
                           />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="shrink-0"
+                            onClick={() => saveCorrectAnswer(q.id, correctAnswers.get(q.id) ?? '')}
+                          >
+                            Save
+                          </Button>
                         </div>
                       )}
 
@@ -777,18 +789,19 @@ export default function ManageResultsPage() {
                               return (
                                 <li key={a.id} className="flex items-center justify-between px-3 py-2">
                                   <div className="flex-1">
-                                    <span className="text-sm">{a.answer_text}</span>
+                                    <span className="text-sm font-medium">{a.display_name ?? 'Unknown'}</span>
+                                    <span className="ml-2 text-sm text-muted-foreground">{a.answer_text}</span>
                                   </div>
                                   <button
                                     type="button"
                                     onClick={() => toggleBonusScore(q.id, a.user_id, q.points)}
                                     className={`rounded-md border px-2 py-0.5 text-xs transition-colors ${
                                       awarded > 0
-                                        ? 'border-primary bg-primary text-primary-foreground'
+                                        ? 'border-destructive bg-destructive text-destructive-foreground hover:opacity-80'
                                         : 'border-input hover:bg-muted'
                                     }`}
                                   >
-                                    {awarded > 0 ? `${awarded} pts` : 'Award'}
+                                    {awarded > 0 ? `Revoke (${awarded} pts)` : 'Award'}
                                   </button>
                                 </li>
                               )

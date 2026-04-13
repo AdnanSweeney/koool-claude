@@ -87,6 +87,26 @@ export default function StepReview({ data, onSubmit, onBack, submitting }: Props
         </div>
       </section>
 
+      {/* Scoring */}
+      <section>
+        <h3 className="mb-2 text-sm font-semibold text-muted-foreground">Scoring</h3>
+        <dl className="space-y-1 text-sm">
+          {basicInfo.has_group_stage && (
+            <div className="flex gap-2">
+              <dt className="font-medium">Group stage:</dt>
+              <dd>
+                {data.scoring.group} pt{data.scoring.group !== 1 ? 's' : ''} per correct advancing
+                team
+              </dd>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <dt className="font-medium">Knockout:</dt>
+            <dd>{data.scoring.knockout.map((pts, i) => `R${i + 1}=${pts}pts`).join(', ')}</dd>
+          </div>
+        </dl>
+      </section>
+
       <div className="flex justify-between">
         <Button type="button" variant="ghost" onClick={onBack}>
           Back

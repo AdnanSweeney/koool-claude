@@ -13,6 +13,7 @@ import { Separator } from '@/components/ui/separator'
 import GroupTable from '@/components/GroupTable'
 import BracketView from '@/components/BracketView'
 import Leaderboard from '@/components/Leaderboard'
+import MembersPicksSection from '@/components/MembersPicksSection'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import type { Pool, PoolStatus, Group as GroupType, KnockoutMatchup } from '@/types'
 
@@ -264,6 +265,9 @@ export default function PoolDashboardPage() {
 
         {/* Leaderboard */}
         <Leaderboard pool={pool} groups={groups} />
+
+        {/* Members' picks with score breakdown */}
+        <MembersPicksSection pool={pool} groups={groups} matchups={matchups} />
 
         {/* Invite Section */}
         <Card>
