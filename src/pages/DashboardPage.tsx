@@ -92,7 +92,7 @@ export default function DashboardPage() {
           </div>
 
           {loading ? (
-            <div className="space-y-3">
+            <div className="flex flex-col gap-4">
               <Skeleton className="h-20 w-full" />
               <Skeleton className="h-20 w-full" />
             </div>
@@ -108,7 +108,7 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-3">
+            <div className="flex flex-col gap-4">
               {pools.map((pool) => (
                 <Link key={pool.id} to={`/pools/${pool.id}`}>
                   <Card className="transition-colors hover:bg-muted/50">

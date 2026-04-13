@@ -62,13 +62,14 @@ interface TeamRowProps {
   isResult: boolean
   mode: BracketMode
   hasResult: boolean
+  hasPick: boolean
   clickable: boolean
   onClick: () => void
 }
 
-function TeamRow({ team, isPicked, isResult, mode, hasResult, clickable, onClick }: TeamRowProps) {
+function TeamRow({ team, isPicked, isResult, mode, hasResult, hasPick, clickable, onClick }: TeamRowProps) {
   const isLoser =
-    (mode === 'pick' && isPicked === false && team !== null) ||
+    (mode === 'pick' && hasPick && isPicked === false && team !== null) ||
     (mode === 'results' && isResult === false && hasResult && team !== null)
 
   const rowBg =
@@ -150,6 +151,7 @@ function MatchupCard({
     isResult: team !== null && team === resultTeam,
     mode,
     hasResult: resultTeam !== null,
+    hasPick: pickedTeam !== null,
     clickable: canClick && team !== null,
     onClick: () => handleClick(team),
   })

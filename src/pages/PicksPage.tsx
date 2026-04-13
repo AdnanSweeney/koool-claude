@@ -42,6 +42,109 @@ interface OtherMember {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Resolve a group source label like "A1" or "B2" to the actual team name
+ * predicted by the user in their group rankings.
+ * Falls back to the raw label if no ranking exists yet.
+ */
+function resolveGroupSource(
+  source: string | null,
+  groups: GroupType[],
+  groupRankings: Map<string, string[]>,
+): string | null {
+  if (!source) return null
+  // Format: "A1" — first char is group prefix, remainder is 1-based position
+  const prefix = source.charAt(0)
+  const pos = parseInt(source.slice(1), 10)
+  if (isNaN(pos) || pos < 1) return source
+
+  const group = groups.find(
+    (g) => g.name.replace(/^Group\s*/i, '').charAt(0).toUpperCase() === prefix.toUpperCase(),
+  )
+  if (!group) return source
+
+  const ranking = groupRankings.get(group.id)
+  if (!ranking || ranking.length < pos) return source
+
+  return ranking[pos - 1] ?? source
+}
+
+/**
+ * Return a copy of matchups with group_source labels replaced by the actual
+ * team names from the user's current group rankings, so the bracket shows
+ * real team names instead of "A1", "B2", etc.
+ *
+ * Note: the pool creation step stores the group source label in BOTH team_a
+ * and group_source_a, so team_a is often "A1" rather than null. We resolve
+ * using group_source_a/b when present, overriding team_a/b.
+ */
+function resolveMatchupTeams(
+  matchups: KnockoutMatchup[],
+  groups: GroupType[],
+  groupRankings: Map<string, string[]>,
+): KnockoutMatchup[] {
+  if (groups.length === 0) return matchups
+  return matchups.map((m) => ({
+    ...m,
+    team_a: m.group_source_a
+      ? resolveGroupSource(m.group_source_a, groups, groupRankings) ?? m.team_a
+      : m.team_a,
+    team_b: m.group_source_b
+      ? resolveGroupSource(m.group_source_b, groups, groupRankings) ?? m.team_b
+      : m.team_b,
+  }))
+}
+
+/**
+ * Build a group-source-label → team-name lookup from groups and rankings.
+ * E.g. { "A1": "canada", "A2": "england", "B1": "usa", "B2": "turkey" }
+ */
+function buildGroupSourceMap(
+  groups: GroupType[],
+  groupRankings: Map<string, string[]>,
+): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const group of groups) {
+    const prefix = group.name.replace(/^Group\s*/i, '').charAt(0).toUpperCase()
+    const ranking = groupRankings.get(group.id)
+    if (!ranking) continue
+    ranking.forEach((team, i) => {
+      map.set(`${prefix}${i + 1}`, team)
+    })
+  }
+  return map
+}
+
+/**
+ * Replace group-source labels in picks' picked_team values with actual team names.
+ * Handles picks stored before the resolve fix (e.g. picked_team: "A1" → "canada").
+ */
+function resolvePicks(
+  picks: PickChoice[],
+  sourceMap: Map<string, string>,
+): PickChoice[] {
+  if (sourceMap.size === 0) return picks
+  return picks.map((p) => {
+    const resolved = sourceMap.get(p.picked_team)
+    return resolved ? { ...p, picked_team: resolved } : p
+  })
+}
+
+/**
+ * Build a groupRankings Map from a member's group picks.
+ */
+function buildRankingsFromGroupPicks(
+  groups: GroupType[],
+  groupPicks: GroupPick[],
+): Map<string, string[]> {
+  const rankMap = new Map<string, string[]>()
+  for (const group of groups) {
+    const gp = groupPicks.find((p) => p.group_id === group.id)
+    rankMap.set(group.id, initRanking(group, gp))
+  }
+  return rankMap
+}
+
 function initRanking(group: GroupType, savedPick?: GroupPick): string[] {
   const all = group.teams as string[]
   if (!savedPick) return [...all]
@@ -496,10 +599,10 @@ export default function PicksPage() {
                 </p>
               )}
               <BracketCanvas
-                matchups={matchups}
+                matchups={resolveMatchupTeams(matchups, groups, groupRankings)}
                 teamCount={teamCount}
                 mode="pick"
-                picks={picks}
+                picks={resolvePicks(picks, buildGroupSourceMap(groups, groupRankings))}
                 results={results}
                 onPick={handleKnockoutPick}
                 disabled={isReadOnly}
@@ -627,18 +730,24 @@ export default function PicksPage() {
 
                             {/* Their bracket */}
                             {member.knockout_picks.length > 0 && matchups.length > 0 && (
-                              <div>
-                                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                  Bracket Picks
-                                </p>
-                                <BracketCanvas
-                                  matchups={matchups}
-                                  teamCount={teamCount}
-                                  mode="view"
-                                  picks={member.knockout_picks}
-                                  results={results}
-                                />
-                              </div>
+                              (() => {
+                                const memberRankings = buildRankingsFromGroupPicks(groups, member.group_picks)
+                                const memberSourceMap = buildGroupSourceMap(groups, memberRankings)
+                                return (
+                                  <div>
+                                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                      Bracket Picks
+                                    </p>
+                                    <BracketCanvas
+                                      matchups={resolveMatchupTeams(matchups, groups, memberRankings)}
+                                      teamCount={teamCount}
+                                      mode="view"
+                                      picks={resolvePicks(member.knockout_picks, memberSourceMap)}
+                                      results={results}
+                                    />
+                                  </div>
+                                )
+                              })()
                             )}
                           </CardContent>
                         )}

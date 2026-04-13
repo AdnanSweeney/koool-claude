@@ -34,7 +34,8 @@
       "Bash(supabase status:*)",
       "Bash(supabase db:*)",
       "Bash(supabase migration:*)",
-      "Bash(psql:*)"
+      "Bash(psql:*)",
+      "Bash(pnpm tsc:*)"
     ]
   }
 }
