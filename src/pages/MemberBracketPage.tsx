@@ -2,13 +2,11 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
-import { getRoundCount } from '@/lib/bracket'
 import { computeGroupScore, computeKnockoutScore, computeBonusScore, computeTotalScore } from '@/lib/scoring'
 import BracketCanvas from '@/components/BracketCanvas'
-import GroupRankingTable from '@/components/GroupRankingTable'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
@@ -115,7 +113,6 @@ export default function MemberBracketPage() {
   const [loading, setLoading] = useState(true)
 
   // Member's data
-  const [memberName, setMemberName] = useState('')
   const [memberPicks, setMemberPicks] = useState<PickChoice[]>([])
   const [memberGroupPicks, setMemberGroupPicks] = useState<GroupPick[]>([])
   const [groupRankings, setGroupRankings] = useState<Map<string, string[]>>(new Map())
@@ -156,7 +153,6 @@ export default function MemberBracketPage() {
 
       const typedPool = poolRes.data as Pool
       setPool(typedPool)
-      setMemberName((userRes.data as { display_name: string })?.display_name ?? 'Unknown')
 
       const typedGroups = (groupsRes.data ?? []) as GroupType[]
       setGroups(typedGroups)

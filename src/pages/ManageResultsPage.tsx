@@ -136,7 +136,6 @@ export default function ManageResultsPage() {
   const [pool, setPool] = useState<Pool | null>(null)
   const [groups, setGroups] = useState<GroupType[]>([])
   const [matchups, setMatchups] = useState<KnockoutMatchup[]>([])
-  const [results, setResults] = useState<Result[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -169,7 +168,7 @@ export default function ManageResultsPage() {
 
   // ─── Load data ──────────────────────────────────────────────────────────
 
-  const loadBonusData = useCallback(async (poolId: string, questions: BonusQuestion[]) => {
+  const loadBonusData = useCallback(async (_poolId: string, questions: BonusQuestion[]) => {
     if (questions.length === 0) return
 
     const qIds = questions.map((q) => q.id)
@@ -407,18 +406,6 @@ export default function ManageResultsPage() {
         )
         if (error) throw error
       }
-
-      // Update local results state
-      const newResults: Result[] = resultPicks.map((p) => ({
-        id: p.id,
-        pool_id: pool.id,
-        round: p.round,
-        matchup_index: p.matchup_index,
-        winning_team: p.picked_team,
-        entered_by: session.user.id,
-        entered_at: new Date().toISOString(),
-      }))
-      setResults(newResults)
 
       toast.success('Knockout results saved!')
     } catch (err) {

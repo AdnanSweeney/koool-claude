@@ -9,7 +9,6 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Separator } from '@/components/ui/separator'
 import GroupTable from '@/components/GroupTable'
 import BracketView from '@/components/BracketView'
 import Leaderboard from '@/components/Leaderboard'
@@ -69,8 +68,6 @@ export default function PoolDashboardPage() {
   const [bonusQuestions, setBonusQuestions] = useState<BonusQuestion[]>([])
   const [myAnsweredCount, setMyAnsweredCount] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [emailInput, setEmailInput] = useState('')
-  const [sendingInvites, setSendingInvites] = useState(false)
 
   const isCreator = pool?.creator_id === session?.user?.id
   const myPickStatus = members.find((m) => m.user_id === session?.user?.id)?.pick_status
@@ -167,41 +164,6 @@ export default function PoolDashboardPage() {
     }
   }
 
-  const sendEmailInvites = async () => {
-    if (!pool || !session?.user) return
-    const emails = emailInput.split(',').map((e) => e.trim()).filter((e) => e.length > 0)
-    if (emails.length === 0) {
-      toast.error('Please enter at least one email address')
-      return
-    }
-
-    try {
-      setSendingInvites(true)
-      const { data, error } = await supabase.functions.invoke('send-invite', {
-        body: {
-          emails,
-          poolId: pool.id,
-          inviterName: session.user.user_metadata?.display_name ?? 'A friend',
-          poolName: pool.name,
-          inviteCode: pool.invite_code,
-        },
-      })
-
-      if (error) throw error
-      const result = data as { sent: number; errors: string[] }
-      if (result.sent > 0) {
-        toast.success(`Sent ${result.sent} invite${result.sent > 1 ? 's' : ''}!`)
-        setEmailInput('')
-      }
-      if (result.errors?.length > 0) {
-        toast.error(`Some invites failed: ${result.errors.join(', ')}`)
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to send invites')
-    } finally {
-      setSendingInvites(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -326,39 +288,13 @@ export default function PoolDashboardPage() {
           <CardHeader>
             <CardTitle className="text-base">Invite Friends</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Share this link</Label>
-              <div className="flex gap-2">
-                <Input value={joinLink} readOnly className="font-mono text-sm" />
-                <Button variant="outline" onClick={copyInviteLink}>
-                  Copy
-                </Button>
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="space-y-1.5">
-              <Label htmlFor="invite-emails">Send email invites</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="invite-emails"
-                  placeholder="email1@example.com, email2@example.com"
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                />
-                <Button
-                  variant="outline"
-                  onClick={sendEmailInvites}
-                  disabled={sendingInvites}
-                >
-                  {sendingInvites ? 'Sending...' : 'Send Invites'}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Separate multiple emails with commas
-              </p>
+          <CardContent>
+            <Label>Share this link</Label>
+            <div className="mt-1.5 flex gap-2">
+              <Input value={joinLink} readOnly className="font-mono text-sm" />
+              <Button variant="outline" onClick={copyInviteLink}>
+                Copy
+              </Button>
             </div>
           </CardContent>
         </Card>
