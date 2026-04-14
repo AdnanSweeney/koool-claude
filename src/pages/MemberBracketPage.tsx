@@ -133,7 +133,7 @@ export default function MemberBracketPage() {
     if (!id || !userId) return
 
     async function load() {
-      const [poolRes, groupsRes, matchupsRes, resultsRes, userRes, picksRes, groupPicksRes, bqRes] =
+      const [poolRes, groupsRes, matchupsRes, resultsRes, _userRes, picksRes, groupPicksRes, bqRes] =
         await Promise.all([
           supabase.from('pools').select('*').eq('id', id!).single(),
           supabase.from('groups').select('*').eq('pool_id', id!).order('name'),

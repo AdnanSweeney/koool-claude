@@ -238,7 +238,6 @@ export default function ManageResultsPage() {
       setMatchups((matchupsRes.data ?? []) as KnockoutMatchup[])
 
       const typedResults = (resultsRes.data ?? []) as Result[]
-      setResults(typedResults)
       setResultPicks(resultsToPicks(typedResults, id!, session!.user.id))
 
       // Initialize group rankings from existing advancing_teams or group teams
