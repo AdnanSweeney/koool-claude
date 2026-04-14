@@ -37,7 +37,9 @@
       "Bash(psql:*)",
       "Bash(pnpm tsc:*)",
       "Bash(npx vitest:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(git rm:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

@@ -2,6 +2,9 @@
 .branches
 .temp
 
+# Local secrets — never commit
+.env
+
 # dotenvx
 .env.keys
 .env.local
