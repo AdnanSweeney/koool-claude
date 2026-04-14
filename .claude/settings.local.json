@@ -39,7 +39,8 @@
       "Bash(npx vitest:*)",
       "Bash(npx tsc:*)",
       "Bash(git rm:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(find:*)"
     ]
   }
 }

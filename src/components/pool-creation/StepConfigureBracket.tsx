@@ -148,9 +148,28 @@ export default function StepConfigureBracket({
         </p>
       </div>
 
-      <Button type="button" variant="outline" size="sm" onClick={autoAssign}>
-        Auto-pair sequentially
-      </Button>
+      <div className="flex gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={autoAssign}>
+          Auto-pair sequentially
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            setMatchups(
+              Array.from({ length: r1MatchupCount }, () => ({
+                team_a: '',
+                team_b: '',
+                group_source_a: null,
+                group_source_b: null,
+              })),
+            )
+          }
+        >
+          Reset
+        </Button>
+      </div>
 
       {unassignedSlots.length > 0 && (
         <div className="space-y-1">

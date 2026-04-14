@@ -294,7 +294,7 @@ export default function PicksPage() {
   // ─── Pick handlers ─────────────────────────────────────────────────────────
 
   const isReadOnly = hasSubmitted || pool?.status !== 'upcoming'
-  const bonusReadOnly = pool?.status !== 'upcoming'
+  const bonusReadOnly = false
 
   const teamCount =
     pool?.has_group_stage && pool.advance_per_group
