@@ -67,6 +67,15 @@ export default function JoinPoolPage() {
     if (!pool || !session?.user) return
     try {
       setJoining(true)
+      const { count, error: countError } = await supabase
+        .from('pool_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('pool_id', pool.id)
+      if (countError) throw countError
+      if ((count ?? 0) >= 100) {
+        toast.error('This pool has reached its maximum of 100 participants.')
+        return
+      }
       const { error } = await supabase
         .from('pool_members')
         .insert({ pool_id: pool.id, user_id: session.user.id })

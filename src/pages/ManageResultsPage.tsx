@@ -796,9 +796,8 @@ export default function ManageResultsPage() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {/* Correct answer input (after lock) */}
-                      {!isUpcoming && (
-                        <div className="flex items-center gap-2">
+                      {/* Correct answer input */}
+                      <div className="flex items-center gap-2">
                           <span className="shrink-0 text-xs text-muted-foreground">Correct answer:</span>
                           <Input
                             className="h-8 text-sm"
@@ -816,11 +815,10 @@ export default function ManageResultsPage() {
                           >
                             Save
                           </Button>
-                        </div>
-                      )}
+                      </div>
 
-                      {/* Member answers (after lock) */}
-                      {!isUpcoming && answers.length > 0 && (
+                      {/* Member answers */}
+                      {answers.length > 0 && (
                         <div>
                           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             Member Answers

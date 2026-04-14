@@ -20,7 +20,7 @@ import type {
   PoolWizardData,
 } from '@/lib/validation'
 
-const MAX_POOLS_PER_USER = 5
+const MAX_POOLS_PER_USER = 3
 
 // Logical step indices:
 // 0 = BasicInfo, 1 = DefineTeams, 2 = ConfigureGroups,
