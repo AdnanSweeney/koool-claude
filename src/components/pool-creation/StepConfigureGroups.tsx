@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -112,7 +113,9 @@ export default function StepConfigureGroups({ teams, defaultValues, onNext, onBa
     })
   }
 
-  const maxAdvance = Math.min(...groups.map((g) => g.teams.length)) - 1
+  // Use theoretical max (teams per group) so the dropdown works before distributing
+  const teamsPerGroup = Math.floor(teams.length / groupCount)
+  const maxAdvance = Math.max(teamsPerGroup - 1, 1)
 
   return (
     <div className="space-y-5">
@@ -195,42 +198,38 @@ export default function StepConfigureGroups({ teams, defaultValues, onNext, onBa
       )}
 
       {/* Groups */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         {groups.map((group, gi) => (
-          <div key={gi} className="rounded-md border p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <Input
-                value={group.name}
-                onChange={(e) => {
-                  const updated = [...groups]
-                  updated[gi] = { ...updated[gi], name: e.target.value }
-                  setGroups(updated)
-                }}
-                className="h-8 text-sm font-semibold"
-              />
-            </div>
+          <div key={gi} className="flex flex-col rounded-lg border p-3 min-h-36">
+            <Input
+              value={group.name}
+              onChange={(e) => {
+                const updated = [...groups]
+                updated[gi] = { ...updated[gi], name: e.target.value }
+                setGroups(updated)
+              }}
+              className="mb-2 h-7 text-sm font-semibold"
+            />
 
-            <ul className="mb-2 space-y-1">
+            <ul className="mb-2 flex-1 space-y-0.5">
               {group.teams.map((team) => (
-                <li key={team} className="flex items-center justify-between text-sm">
-                  <span>{team}</span>
-                  <Button
+                <li key={team} className="flex items-center justify-between gap-2 rounded px-1 py-0.5 hover:bg-muted/50">
+                  <span className="truncate text-sm">{team}</span>
+                  <button
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 text-xs"
                     onClick={() => removeTeamFromGroup(gi, team)}
+                    className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
                   >
-                    Remove
-                  </Button>
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 </li>
               ))}
             </ul>
 
             {unassignedTeams.length > 0 && (
               <Select onValueChange={(team) => addTeamToGroup(gi, team)}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Add team..." />
+                <SelectTrigger className="h-7 text-xs">
+                  <SelectValue placeholder="Add team…" />
                 </SelectTrigger>
                 <SelectContent>
                   {unassignedTeams.map((team) => (
